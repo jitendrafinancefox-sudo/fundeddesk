@@ -7,7 +7,7 @@ import { GridRenderer } from '../renderers/GridRenderer';
 import { CandleRenderer } from '../renderers/CandleRenderer';
 import { DrawingRenderer } from '../renderers/DrawingRenderer';
 import { IndicatorRenderer } from '../renderers/IndicatorRenderer';
-import { SelectionRenderer } from '../renderers/SelectionRenderer';
+import { HandleRenderer } from '../renderers/HandleRenderer';
 import { CrosshairRenderer } from '../renderers/CrosshairRenderer';
 import { AxisRenderer } from '../renderers/AxisRenderer';
 import { TimeAxisRenderer } from '../renderers/TimeAxisRenderer';
@@ -18,14 +18,14 @@ import { setViewport } from '@/stores/viewportStore';
 export class CanvasChartEngine {
   constructor(canvas, chartId) {
     this.canvas = canvas; this.chartId = chartId; this.viewport = new ViewportEngine();
-    this.scene = { candles: [], drawings: [], indicators: [], selectedIds: [], crosshair: null, cursor: null, overlays: [], marquee: null, pendingDrawing: null };
+    this.scene = { candles: [], drawings: [], indicators: [], selectedIds: [], crosshair: null, cursor: null, overlays: [], marquee: null, pendingDrawing: null, hover: null, tool: 'cursor' };
     this.pipeline = new RenderPipeline(canvas, this.layers());
   }
   layers() {
     const scene = () => this.renderScene();
     return [
       { layer: 'base', render: (ctx) => { const s = scene(); GridRenderer(s)(ctx); CandleRenderer(s)(ctx); IndicatorRenderer(s)(ctx); AxisRenderer(s)(ctx); TimeAxisRenderer(s)(ctx); } },
-      { layer: 'overlay', render: (ctx) => { const s = scene(); DrawingRenderer({ ...s, selectedIds: s.selectedIds })(ctx); if (s.pendingDrawing) DrawingRenderer({ ...s, drawings: [s.pendingDrawing], selectedId: null })(ctx); SelectionRenderer({ drawings: s.selectedDrawings, transform: s.transform })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
+      { layer: 'overlay', render: (ctx) => { const s = scene(); DrawingRenderer({ ...s, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); if (s.pendingDrawing) DrawingRenderer({ ...s, drawings: [s.pendingDrawing], selectedId: null })(ctx); HandleRenderer({ drawings: s.selectedDrawings, transform: s.transform, hover: s.hover, visible: s.handlesVisible })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
     ];
   }
   renderScene() {
@@ -44,6 +44,8 @@ export class CanvasChartEngine {
       priceTicks: this.viewport.priceScale.getTicks(),
       timeTicks: this.viewport.timeScale.getTicks(visibleCandles),
       drawings, selectedDrawings: this.scene.drawings.filter((drawing) => selected.has(drawing.id)),
+      hoverId: this.scene.hover?.id || null,
+      handlesVisible: this.scene.tool === 'cursor' && !this.scene.pendingDrawing,
     };
   }
   setSpatialQuery(fn) { this.spatialQuery = fn; }
@@ -60,6 +62,12 @@ export class CanvasChartEngine {
   }
   setDrawings(drawings, rect = null) { this.scene.drawings = drawings; this.pipeline.invalidate(rect ? 'rect' : 'full', rect); }
   setSelected(ids) { this.scene.selectedIds = Array.isArray(ids) ? ids : (ids == null ? [] : [ids]); this.pipeline.invalidate('full'); }
+  setHover(hover) {
+    const same = Boolean(hover && this.scene.hover && hover.id === this.scene.hover.id && hover.kind === this.scene.hover.kind && hover.anchorIndex === this.scene.hover.anchorIndex);
+    if (same) return;
+    this.scene.hover = hover; this.pipeline.invalidate('full');
+  }
+  setToolMode(tool) { this.scene.tool = tool; this.pipeline.invalidate('full'); }
   setMarquee(rect) { this.scene.marquee = rect; this.pipeline.invalidate(rect ? 'rect' : 'full', rect); }
   setPendingDrawing(drawing, rect = null) { this.scene.pendingDrawing = drawing; this.pipeline.invalidate(rect ? 'rect' : 'full', rect); }
   setIndicators(indicators) { this.scene.indicators = indicators; this.pipeline.invalidate('full'); }

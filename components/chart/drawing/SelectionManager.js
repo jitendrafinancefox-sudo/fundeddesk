@@ -2,8 +2,9 @@
 import { rectFromPoints, rectsOverlap, anchorsRect } from './GeometryEngine';
 
 // Owns the selected drawing ids and the marquee (rubber-band) rectangle.
-// Pure state + events: rendering and mutation live elsewhere.
-export function createSelectionManager({ bus } = {}) {
+// Pure state + events: rendering and mutation live elsewhere. Locked and
+// hidden drawings can never enter a marquee selection.
+export function createSelectionManager({ bus, layers } = {}) {
   const selected = new Set();
   let marquee = null; // { start, current }
   const emit = (event, payload) => bus?.emit(event, payload);
@@ -25,9 +26,10 @@ export function createSelectionManager({ bus } = {}) {
     isMarqueeActive() { return Boolean(marquee); },
     marqueeRect() { if (!marquee) return null; return rectFromPoints([marquee.start, marquee.current]); },
     // Select every drawing whose screen bounds intersect the rect (topmost
-    // order preserved). Returns the new selection for callers that need it.
+    // order preserved). Locked and hidden drawings are skipped. Returns the
+    // new selection for callers that need it.
     selectInRect(rect, drawings, transform, { additive = false } = {}) {
-      const hits = drawings.filter((drawing) => { const bounds = anchorsRect(drawing.anchorPoints, transform); return bounds && rectsOverlap(bounds, rect); }).map((drawing) => drawing.id);
+      const hits = drawings.filter((drawing) => !drawing.locked && !layers?.isHidden(drawing.id)).filter((drawing) => { const bounds = anchorsRect(drawing.anchorPoints, transform); return bounds && rectsOverlap(bounds, rect); }).map((drawing) => drawing.id);
       if (additive) hits.forEach((id) => selected.add(id)); else { selected.clear(); hits.forEach((id) => selected.add(id)); }
       emit('selection:changed', this.ids());
       return this.ids();
