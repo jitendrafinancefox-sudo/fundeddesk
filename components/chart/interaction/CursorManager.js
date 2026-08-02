@@ -19,8 +19,17 @@ export function resolveCursor({ tool, hover, panning = false, axisHover = null }
   if (!hover) return 'grab';
   if (hover.kind === 'rotation') return ROTATE_CURSOR;
   if (hover.kind === 'midpoint') return 'move';
+  if (hover.kind === 'center') return 'move';
   if (hover.kind === 'body') return 'move';
+  if (hover.kind === 'edge') {
+    const nx = hover.edge?.nx || 0; const ny = hover.edge?.ny || 0;
+    return Math.abs(nx) > Math.abs(ny) ? 'ew-resize' : 'ns-resize';
+  }
   if (hover.kind === 'anchor') {
+    if (hover.shape) {
+      if (hover.screenPoints?.length === 4) return (hover.anchorIndex % 2 === 0) ? 'nwse-resize' : 'nesw-resize';
+      return 'move';
+    }
     const type = hover.drawingType;
     if (type === 'hline') return 'ns-resize';
     if (type === 'vline') return 'ew-resize';
