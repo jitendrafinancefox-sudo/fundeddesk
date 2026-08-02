@@ -1,0 +1,21 @@
+{
+  "name": "fundeddesk",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@highcharts/map-collection": "^2.3.3",
+    "@supabase/supabase-js": "2.45.0",
+    "highcharts": "^13.0.0",
+    "klinecharts": "^10.0.1",
+    "lightweight-charts": "^4.2.3",
+    "lucide-react": "^0.383.0",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}
