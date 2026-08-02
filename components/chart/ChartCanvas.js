@@ -18,7 +18,7 @@ import { createHitTestEngine } from './interaction/HitTestEngine';
 import { createHoverManager } from './interaction/HoverManager';
 import { createCursorManager } from './interaction/CursorManager';
 import { createKeyboardShortcutManager } from './interaction/KeyboardShortcutManager';
-import { isShapeType, isZoneType, isChannelType, normalizeShapeAnchors } from './drawing/DrawingDefinitions';
+import { isShapeType, isZoneType, isChannelType, isStrokeType, normalizeShapeAnchors } from './drawing/DrawingDefinitions';
 import { isRegressionType, fitLinearRegression } from './drawing/ChannelGeometry';
 import ChartContextMenu from './ui/ChartContextMenu';
 import PropertiesPanel from './ui/PropertiesPanel';
@@ -140,7 +140,7 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
   useEffect(() => { activeIndicatorsRef.current = activeIndicators; engineRef.current?.setIndicators(buildIndicators(candlesRef.current, activeIndicators)); }, [activeIndicators]);
   useEffect(() => { drawingsVisibleRef.current = drawingsVisible; engineRef.current?.setDrawings(drawingsVisible ? drawingsRef.current : []); }, [drawingsVisible, chartKey]);
   useEffect(() => { if (clearRevision) drawingInteractionRef.current?.clearAll(); }, [clearRevision, chartKey]);
-  useEffect(() => { engineRef.current?.setToolMode(tool); }, [tool, chartKey]);
+  useEffect(() => { engineRef.current?.setToolMode(tool); if (tool !== 'cursor') { drawingInteractionRef.current?.exitPointEdit(); engineRef.current?.setPointEdit(null); } }, [tool, chartKey]);
   useEffect(() => { applyCursor(); }, [tool, axisHover]);
   useEffect(() => {
     toolManagerRef.current?.configure(snapConfig);
@@ -175,6 +175,11 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     }
     else if (action === 'channelDash' && id) interaction?.updateStyle(id, { dash: !menuDrawing?.style?.dash });
     else if (action === 'channelArrow' && id) interaction?.updateStyle(id, { arrow: !menuDrawing?.style?.arrow });
+    else if (action === 'editPoints' && id) { const next = interaction?.togglePointEdit(id); engineRef.current?.setPointEdit(next); }
+    else if (action === 'pointInsert' && id) interaction?.insertAnchorAt(id, contextMenu.x, contextMenu.y);
+    else if (action === 'pointDelete' && id) interaction?.deleteAnchorAt(id, contextMenu.x, contextMenu.y);
+    else if (action === 'pointSmooth' && id) interaction?.convertAnchorAt(id, contextMenu.x, contextMenu.y, true);
+    else if (action === 'pointSharp' && id) interaction?.convertAnchorAt(id, contextMenu.x, contextMenu.y, false);
   };
   const axisDragRef = useRef(null);
   function zoneAt(p) {
@@ -194,8 +199,10 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
       if (zone === 'price') { axisDragRef.current = { type: 'price', lastY: p.y }; applyCursor(); return; }
       if (zone === 'time') { axisDragRef.current = { type: 'time', lastX: p.x, anchorX: p.x }; applyCursor(); return; }
       if (tool === 'cursor') {
-        const editing = drawingInteractionRef.current?.pointerDown(p, { additive: keyboardRef.current?.mods().shift });
-        if (!editing) { dragRef.current = p; interactionRef.current?.startPan(p); }
+        const interaction = drawingInteractionRef.current;
+        const wasEditing = Boolean(interaction?.pointEditingId());
+        const editing = interaction?.pointerDown(p, { additive: keyboardRef.current?.mods().shift });
+        if (!editing) { if (wasEditing && !interaction.pointEditingId()) engineRef.current?.setPointEdit(null); dragRef.current = p; interactionRef.current?.startPan(p); }
         applyCursor();
         return;
       }
@@ -235,7 +242,10 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
         const final = toolManagerRef.current.release();
         const pending = toolManagerRef.current.pendingDrawing();
         engineRef.current?.setPendingDrawing(pending || null);
-        if (final) drawingInteractionRef.current?.place(final);
+        if (final) {
+          if (tool === 'eraser') drawingInteractionRef.current?.erase(final);
+          else drawingInteractionRef.current?.place(final);
+        }
         applyCursor();
         return;
       }
@@ -246,9 +256,24 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     onDoubleClick={(event) => {
       const p = point(event);
       if (zoneAt(p) === 'price') { engineRef.current?.resetPriceScale(); return; }
+      // Open-ended tools (path/polyline) finish on double-click.
+      if (toolManagerRef.current?.isActive()) {
+        const final = toolManagerRef.current.finish();
+        engineRef.current?.setPendingDrawing(null);
+        if (final) drawingInteractionRef.current?.place(final);
+        return;
+      }
       if (tool !== 'cursor') return;
       const hit = drawingInteractionRef.current?.hitLoose(p);
-      if (hit) { selectionRef.current?.select(hit.id); setProperties({ id: hit.id }); }
+      if (hit) {
+        selectionRef.current?.select(hit.id);
+        if (isStrokeType(hit.drawingType)) {
+          const next = drawingInteractionRef.current?.togglePointEdit(hit.id);
+          engineRef.current?.setPointEdit(next);
+        } else {
+          setProperties({ id: hit.id });
+        }
+      }
     }}
     onContextMenu={(event) => {
       event.preventDefault();
@@ -262,7 +287,7 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     onWheel={(event) => { event.preventDefault(); interactionRef.current?.zoom(event.deltaY, point(event).x); }}
     style={{ display: 'block', width: '100%', height, touchAction: 'none' }}
   />
-    {contextMenu && <ChartContextMenu x={contextMenu.x} y={contextMenu.y} id={contextMenu.id} locked={menuDrawing?.locked} hidden={menuDrawing?.hidden} zone={menuDrawing && isZoneType(menuDrawing.drawingType) ? { extendLeft: menuDrawing.style?.extendLeft !== false, extendRight: menuDrawing.style?.extendRight !== false, showLabel: menuDrawing.style?.showLabel !== false, showPrice: menuDrawing.style?.showPrice !== false } : null} channel={menuDrawing && isChannelType(menuDrawing.drawingType) ? { extendLeft: menuDrawing.style?.extendLeft !== false, extendRight: menuDrawing.style?.extendRight !== false, dash: Boolean(menuDrawing.style?.dash), arrow: Boolean(menuDrawing.style?.arrow) } : null} hasClipboard={Boolean(drawingInteractionRef.current?.clipboard?.length)} bounds={contextMenu.bounds} onAction={runMenuAction} onClose={() => setContextMenu(null)} />}
-    {propertiesDrawing && <PropertiesPanel drawing={propertiesDrawing} onStyle={(patch) => drawingInteractionRef.current?.updateStyle(propertiesDrawing.id, patch)} onFib={(patch) => drawingInteractionRef.current?.updateFib(propertiesDrawing.id, patch)} onLockToggle={(locked) => (locked ? drawingInteractionRef.current?.lock([propertiesDrawing.id]) : drawingInteractionRef.current?.unlock([propertiesDrawing.id]))} onClose={() => setProperties(null)} />}
+    {contextMenu && <ChartContextMenu x={contextMenu.x} y={contextMenu.y} id={contextMenu.id} locked={menuDrawing?.locked} hidden={menuDrawing?.hidden} zone={menuDrawing && isZoneType(menuDrawing.drawingType) ? { extendLeft: menuDrawing.style?.extendLeft !== false, extendRight: menuDrawing.style?.extendRight !== false, showLabel: menuDrawing.style?.showLabel !== false, showPrice: menuDrawing.style?.showPrice !== false } : null} channel={menuDrawing && isChannelType(menuDrawing.drawingType) ? { extendLeft: menuDrawing.style?.extendLeft !== false, extendRight: menuDrawing.style?.extendRight !== false, dash: Boolean(menuDrawing.style?.dash), arrow: Boolean(menuDrawing.style?.arrow) } : null} stroke={menuDrawing && isStrokeType(menuDrawing.drawingType) ? { editing: drawingInteractionRef.current?.pointEditingId() === menuDrawing.id, points: menuDrawing.anchorPoints.length } : null} hasClipboard={Boolean(drawingInteractionRef.current?.clipboard?.length)} bounds={contextMenu.bounds} onAction={runMenuAction} onClose={() => setContextMenu(null)} />}
+    {propertiesDrawing && <PropertiesPanel drawing={propertiesDrawing} onStyle={(patch) => drawingInteractionRef.current?.updateStyle(propertiesDrawing.id, patch)} onFib={(patch) => drawingInteractionRef.current?.updateFib(propertiesDrawing.id, patch)} onLockToggle={(locked) => (locked ? drawingInteractionRef.current?.lock([propertiesDrawing.id]) : drawingInteractionRef.current?.unlock([propertiesDrawing.id]))} onPointEdit={(id) => { const next = drawingInteractionRef.current?.togglePointEdit(id); engineRef.current?.setPointEdit(next); }} onClose={() => setProperties(null)} />}
   </div>;
 }

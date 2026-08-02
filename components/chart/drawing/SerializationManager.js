@@ -4,7 +4,12 @@ import { DRAWING_TYPES } from '../engine/DrawingSchema';
 import { isChannelType, isRegressionType } from './ChannelGeometry';
 import { isFibType } from './FibGeometry';
 import { sanitizeFib } from './FibSerializer';
+import { isStrokeType } from './BrushGeometry';
+import { sanitizeStroke } from './BrushSerializer';
 
+// v5: stroke-family drawings (brush/highlighter/eraser/path/polyline/curve/
+// arc) carry a brush payload { taper, raw, smooth } and curve control
+// points; anchor arrays are capped for the storage envelope.
 // v4: Fibonacci tools carry a fib payload { levels, label } describing the
 // visible level set and label formatting.
 // v3: channels store 3-4 anchor points (parallel/flat/disjoint layouts plus
@@ -14,7 +19,7 @@ import { sanitizeFib } from './FibSerializer';
 // v2: shapes are stored as full corner anchors (TL/TR/BR/BL) instead of
 // 2-point drag diagonals; rotated shapes carry the rotation in those anchors.
 // v1 payloads still load — the commit funnel promotes legacy diagonals.
-export const DRAWINGS_VERSION = 4;
+export const DRAWINGS_VERSION = 5;
 const VALID_IDENTITY = (drawing) => drawing && typeof drawing.id === 'string' && typeof drawing.symbol === 'string'
   && typeof drawing.timeframe === 'string' && DRAWING_TYPES.includes(drawing.drawingType)
   && Array.isArray(drawing.anchorPoints) && drawing.anchorPoints.length > 0;
@@ -39,6 +44,9 @@ function sanitize(envelope) {
     regression: isRegressionType(drawing.drawingType) ? drawing.regression || null : undefined,
     // Fibonacci tools carry a validated levels/label payload (v4).
     fib: isFibType(drawing.drawingType) ? sanitizeFib(drawing).fib : undefined,
+    // Stroke-family tools carry a validated brush payload (v5); anchor
+    // arrays are numeric, time-sorted and capped.
+    ...(isStrokeType(drawing.drawingType) ? sanitizeStroke(drawing) : {}),
   }));
 }
 

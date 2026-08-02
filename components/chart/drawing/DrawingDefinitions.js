@@ -18,8 +18,12 @@ import { channelGeometry, channelHitTest, extendLine, extendFlat } from './Chann
 import { isFibType } from './FibGeometry';
 import { renderFib } from './FibRenderer';
 import { fibHitTest } from './FibHitTester';
+import { renderBrushStroke } from './BrushRenderer';
+import { strokeFamilyHit } from './PathHitTester';
+import { isStrokeType, isFreehandType, isClickPlaceType } from './BrushGeometry';
 export { isChannelType } from './ChannelGeometry';
 export { isFibType };
+export { isStrokeType, isFreehandType, isClickPlaceType };
 
 const fmtPrice = (price) => price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -260,6 +264,13 @@ export const DRAWING_DEFINITIONS = {
   fibChannel: { label: 'Fib Channel', anchorCount: 3, fib: true, rotatable: true, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
   fibSpiral: { label: 'Fib Spiral', anchorCount: 2, fib: true, rotatable: true, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
   fibTimeZone: { label: 'Fib Time Zone', anchorCount: 2, fib: true, rotatable: false, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
+  brush: { label: 'Brush', anchorCount: 2, continuous: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
+  highlighter: { label: 'Highlighter', anchorCount: 2, continuous: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
+  eraser: { label: 'Eraser', anchorCount: 2, continuous: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
+  path: { label: 'Path', anchorCount: 0, clickPlace: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
+  polyline: { label: 'Polyline', anchorCount: 0, clickPlace: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
+  curve: { label: 'Curve (Bezier)', anchorCount: 4, clickPlace: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
+  arc: { label: 'Arc', anchorCount: 3, clickPlace: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
 };
 
 // Zone band rendering: translucent fill + top/bottom borders + labels.

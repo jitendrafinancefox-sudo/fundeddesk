@@ -28,7 +28,8 @@ export function createKeyboardShortcutManager({ getInteraction, getToolManager, 
     else if (mod && key === 'c') { event.preventDefault(); interaction?.copy(); }
     else if (mod && key === 'v') { event.preventDefault(); interaction?.paste(); }
     else if (mod && key === 'd') { event.preventDefault(); interaction?.duplicate(); }
-    else if (event.key === 'Escape') { event.preventDefault(); interaction?.cancelMarquee(); getToolManager?.()?.cancel(); engine?.setPendingDrawing(null); selection?.clear(); }
+    else if (event.key === 'Escape') { event.preventDefault(); interaction?.cancelMarquee(); interaction?.exitPointEdit(); getToolManager?.()?.cancel(); engine?.setPendingDrawing(null); engine?.setPointEdit(null); selection?.clear(); }
+    else if (event.key === 'Enter') { const final = getToolManager?.()?.finish(); if (final) { event.preventDefault(); engine?.setPendingDrawing(null); interaction?.place(final); } }
   };
   const up = (event) => setMod(event.key, false);
   const blur = () => { mods.shift = false; mods.alt = false; mods.ctrl = false; };

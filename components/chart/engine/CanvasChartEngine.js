@@ -9,7 +9,8 @@ import { DrawingRenderer } from '../renderers/DrawingRenderer';
 import { ZoneRenderer } from '../renderers/ZoneRenderer';
 import { ChannelRenderer } from '../renderers/ChannelRenderer';
 import { FibRenderer } from '../renderers/FibRenderer';
-import { ZONE_TYPES, isChannelType, isFibType } from '../drawing/DrawingDefinitions';
+import { BrushRenderer } from '../drawing/BrushRenderer';
+import { ZONE_TYPES, isChannelType, isFibType, isStrokeType } from '../drawing/DrawingDefinitions';
 import { IndicatorRenderer } from '../renderers/IndicatorRenderer';
 import { HandleRenderer } from '../renderers/HandleRenderer';
 import { CrosshairRenderer } from '../renderers/CrosshairRenderer';
@@ -22,14 +23,14 @@ import { setViewport } from '@/stores/viewportStore';
 export class CanvasChartEngine {
   constructor(canvas, chartId) {
     this.canvas = canvas; this.chartId = chartId; this.viewport = new ViewportEngine();
-    this.scene = { candles: [], drawings: [], indicators: [], selectedIds: [], crosshair: null, cursor: null, overlays: [], marquee: null, pendingDrawing: null, hover: null, tool: 'cursor' };
+    this.scene = { candles: [], drawings: [], indicators: [], selectedIds: [], crosshair: null, cursor: null, overlays: [], marquee: null, pendingDrawing: null, hover: null, tool: 'cursor', pointEditId: null };
     this.pipeline = new RenderPipeline(canvas, this.layers());
   }
   layers() {
     const scene = () => this.renderScene();
     return [
       { layer: 'base', render: (ctx) => { const s = scene(); GridRenderer(s)(ctx); CandleRenderer(s)(ctx); IndicatorRenderer(s)(ctx); AxisRenderer(s)(ctx); TimeAxisRenderer(s)(ctx); } },
-      { layer: 'overlay', render: (ctx) => { const s = scene(); const pending = s.pendingDrawing; ZoneRenderer({ ...s, drawings: s.zones, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); ChannelRenderer({ ...s, drawings: pending && isChannelType(pending.drawingType) ? [...s.channels, pending] : s.channels })(ctx); FibRenderer({ ...s, drawings: pending && isFibType(pending.drawingType) ? [...s.fibDrawings, pending] : s.fibDrawings })(ctx); DrawingRenderer({ ...s, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); if (pending && !isChannelType(pending.drawingType) && !isFibType(pending.drawingType)) DrawingRenderer({ ...s, drawings: [pending], selectedId: null })(ctx); HandleRenderer({ drawings: s.selectedDrawings, transform: s.transform, hover: s.hover, visible: s.handlesVisible })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
+      { layer: 'overlay', render: (ctx) => { const s = scene(); const pending = s.pendingDrawing; ZoneRenderer({ ...s, drawings: s.zones, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); ChannelRenderer({ ...s, drawings: pending && isChannelType(pending.drawingType) ? [...s.channels, pending] : s.channels })(ctx); FibRenderer({ ...s, drawings: pending && isFibType(pending.drawingType) ? [...s.fibDrawings, pending] : s.fibDrawings })(ctx); BrushRenderer({ ...s, drawings: pending && isStrokeType(pending.drawingType) ? [...s.strokeDrawings, pending] : s.strokeDrawings })(ctx); DrawingRenderer({ ...s, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); if (pending && !isChannelType(pending.drawingType) && !isFibType(pending.drawingType) && !isStrokeType(pending.drawingType)) DrawingRenderer({ ...s, drawings: [pending], selectedId: null })(ctx); HandleRenderer({ drawings: s.selectedDrawings, transform: s.transform, hover: s.hover, visible: s.handlesVisible, pointEditId: s.pointEditId })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
     ];
   }
   renderScene() {
@@ -50,6 +51,7 @@ export class CanvasChartEngine {
       drawings, zones: drawings.filter((drawing) => ZONE_TYPES.includes(drawing.drawingType)),
       channels: drawings.filter((drawing) => isChannelType(drawing.drawingType)),
       fibDrawings: drawings.filter((drawing) => isFibType(drawing.drawingType)),
+      strokeDrawings: drawings.filter((drawing) => isStrokeType(drawing.drawingType)),
       selectedDrawings: this.scene.drawings.filter((drawing) => selected.has(drawing.id)),
       hoverId: this.scene.hover?.id || null,
       handlesVisible: this.scene.tool === 'cursor' && !this.scene.pendingDrawing,
@@ -75,6 +77,7 @@ export class CanvasChartEngine {
     this.scene.hover = hover; this.pipeline.invalidate('full');
   }
   setToolMode(tool) { this.scene.tool = tool; this.pipeline.invalidate('full'); }
+  setPointEdit(id) { this.scene.pointEditId = id || null; this.pipeline.invalidate('full'); }
   setMarquee(rect) { this.scene.marquee = rect; this.pipeline.invalidate(rect ? 'rect' : 'full', rect); }
   setPendingDrawing(drawing, rect = null) { this.scene.pendingDrawing = drawing; this.pipeline.invalidate(rect ? 'rect' : 'full', rect); }
   setIndicators(indicators) { this.scene.indicators = indicators; this.pipeline.invalidate('full'); }

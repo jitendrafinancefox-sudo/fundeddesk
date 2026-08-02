@@ -14,16 +14,31 @@
 import { polygonCorners, polygonCenter, polygonEdges, polygonRotation, rotatePoint } from '../drawing/ShapeGeometry';
 import { channelGeometry, projectPointOnLine, lineNormal } from '../drawing/ChannelGeometry';
 import { fibHandleGeometry } from '../drawing/FibHitTester';
-import { DRAWING_DEFINITIONS, isFibType } from '../drawing/DrawingDefinitions';
+import { DRAWING_DEFINITIONS, isFibType, isStrokeType } from '../drawing/DrawingDefinitions';
+import { controlHandles, controlMidpoints } from '../drawing/BrushGeometry';
 
 const ROTATABLE_TOOLS = new Set(['trend', 'ray', 'extended', 'measure', 'arrow']);
 const midpointOf = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
-export function handleGeometry(drawing, transform) {
+export function handleGeometry(drawing, transform, { pointEdit = false } = {}) {
   const anchors = drawing.anchorPoints
     .map((anchor, index) => { const point = transform.anchorToPixel(anchor); return point ? { x: point.x, y: point.y, index } : null; })
     .filter(Boolean);
   const def = DRAWING_DEFINITIONS[drawing.drawingType];
+  if (isStrokeType(drawing.drawingType)) {
+    // Stroke family: point-edit mode exposes every control point plus
+    // segment-midpoint insert targets; normal mode exposes a bounded sample
+    // (first/middle/last) plus a midpoint body-move handle.
+    const handles = pointEdit ? anchors : controlHandles(drawing, transform, 8);
+    const insertPoints = pointEdit ? controlMidpoints(handles) : [];
+    const mid = anchors.length ? anchors[Math.floor((anchors.length - 1) / 2)] : null;
+    return {
+      stroke: true, anchors: handles, insertPoints,
+      midpoint: mid ? { x: mid.x, y: mid.y } : null,
+      center: null, rotation: null, rotatable: false,
+      pointEdit,
+    };
+  }
   if (def?.shape) {
     const corners = polygonCorners(anchors);
     const edges = polygonEdges(corners);
@@ -92,15 +107,22 @@ export function handleGeometry(drawing, transform) {
 // null. Kinds: rotation > center > edge > corner (shapes) and
 // rotation > midpoint > anchors (lines) — nearest wins. Anchors/edges carry
 // their index; the full geometry rides along so callers skip a second pass.
-export function nearestHandle(drawing, point, transform, threshold = 9) {
-  const geometry = handleGeometry(drawing, transform);
+// Stroke drawings in point-edit mode hit insert targets before anchors.
+export function nearestHandle(drawing, point, transform, threshold = 9, { pointEdit = false } = {}) {
+  const geometry = handleGeometry(drawing, transform, { pointEdit });
   let best = null; let bestDistance = threshold;
-  const consider = (kind, index, x, y) => {
+  const consider = (kind, index, x, y, extra = {}) => {
     const distance = Math.hypot(x - point.x, y - point.y);
-    if (distance <= bestDistance) { bestDistance = distance; best = { kind, index, x, y, geometry }; }
+    if (distance <= bestDistance) { bestDistance = distance; best = { kind, index, x, y, geometry, ...extra }; }
   };
   if (geometry.rotation) consider('rotation', -1, geometry.rotation.x, geometry.rotation.y);
   if (geometry.widthHandle) consider('width', -1, geometry.widthHandle.x, geometry.widthHandle.y);
+  if (geometry.stroke) {
+    if (geometry.insertPoints) geometry.insertPoints.forEach((p) => consider('insert', -1, p.x, p.y, { from: p.from, to: p.to }));
+    if (geometry.midpoint) consider('midpoint', -1, geometry.midpoint.x, geometry.midpoint.y);
+    geometry.anchors.forEach((anchor) => consider('anchor', anchor.index, anchor.x, anchor.y));
+    return best;
+  }
   if (geometry.shape) {
     consider('center', -1, geometry.center.x, geometry.center.y);
     geometry.edges.forEach((edge, i) => consider('edge', i, edge.mid.x, edge.mid.y));

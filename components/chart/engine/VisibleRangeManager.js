@@ -1,4 +1,6 @@
 'use client';
+import { isStrokeType } from '../drawing/DrawingDefinitions';
+import { strokeVisible } from '../drawing/BrushGeometry';
 
 export function queryVisibleCandles(candles, range) {
   const from = Math.max(0, Math.floor(range.from)); const to = Math.min(candles.length - 1, Math.ceil(range.to));
@@ -12,5 +14,8 @@ export function findCandleIndex(candles, time) {
 }
 
 export function queryVisibleDrawings(drawings, transform) {
-  return drawings.filter((drawing) => drawing.anchorPoints.some((anchor) => transform.timeToPixel(anchor.time) != null));
+  return drawings.filter((drawing) => {
+    if (isStrokeType(drawing.drawingType)) return strokeVisible(drawing, transform); // O(1) probes for dense strokes
+    return drawing.anchorPoints.some((anchor) => transform.timeToPixel(anchor.time) != null);
+  });
 }

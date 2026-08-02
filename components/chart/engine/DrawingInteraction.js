@@ -1,10 +1,13 @@
 'use client';
 import { unionRect } from '../drawing/GeometryEngine';
 import { snapAnchor } from './SnappingEngine';
-import { isShapeType, isZoneType, isChannelType, isFibType, normalizeShapeAnchors } from '../drawing/DrawingDefinitions';
+import { isShapeType, isZoneType, isChannelType, isFibType, isStrokeType, normalizeShapeAnchors } from '../drawing/DrawingDefinitions';
 import { polygonCorners, polygonEdges, polygonCenter, resizeEdge } from '../drawing/ShapeGeometry';
 import { channelGeometry, isRegressionType, fitLinearRegression } from '../drawing/ChannelGeometry';
 import { fibGeometry } from '../drawing/FibBase';
+import { lowerBound } from '../drawing/BrushGeometry';
+import { eraseStroke, eraseTouches, convertToSmooth } from '../drawing/BrushEngine';
+import { strokeFamilyHit } from '../drawing/PathHitTester';
 
 const clone = (value) => structuredClone(value);
 
@@ -29,6 +32,7 @@ export class DrawingInteraction {
     this.clipboard = [];
     this.marqueeActive = false;
     this.marqueeAdditive = false;
+    this.pointEditId = null; // stroke drawing whose control points are editable
   }
 
   // Topmost drawing under the pointer: handles (rotation > midpoint >
@@ -47,10 +51,12 @@ export class DrawingInteraction {
     const mods = this.getMods() || {};
     let hit = this.hit(point);
     if (!hit) {
+      if (this.pointEditId) this.exitPointEdit();
       if (additive || mods.shift) { this.marqueeActive = true; this.marqueeAdditive = true; this.selection.marqueeStart(point); return true; }
       this.selection.clear();
       return false;
     }
+    if (this.pointEditId && hit.id !== this.pointEditId) this.exitPointEdit();
     if (mods.alt && hit.kind !== 'rotation') {
       hit = this.duplicateForDrag(hit);
       if (!hit) return true;
@@ -59,6 +65,14 @@ export class DrawingInteraction {
     this.selection.select(hit.id, { additive });
     const transform = this.getTransform(); if (!transform) return true;
     const drawing = this.registry.get(hit.id); if (!drawing) return true;
+    if (hit.kind === 'insert') {
+      this.mode = {
+        id: hit.id, kind: 'insert', from: hit.from, to: hit.to,
+        start: transform.pixelToAnchor(point.x, point.y),
+        startCursor: { x: point.x, y: point.y }, original: clone(drawing),
+      };
+      return true;
+    }
     // Dragging the body of an already-multi-selected member moves the whole
     // group; handles always edit a single drawing.
     if (hit.kind === 'body' && this.selection.has(hit.id) && this.selection.count() > 1) {
@@ -86,6 +100,16 @@ export class DrawingInteraction {
     if (mode.kind === 'group') { this.moveGroup(point, transform, mode, mods, snapActive); return; }
     const next = clone(mode.original);
     const isChannel = isChannelType(mode.original.drawingType) || isFibType(mode.original.drawingType);
+    if (mode.kind === 'insert') {
+      // Turn the drag into a real anchor at the cursor between from/to.
+      let anchor = transform.pixelToAnchor(point.x, point.y);
+      if (snapActive && this.snap.magnet) anchor = snapAnchor(anchor, this.getCandles(), this.snap);
+      next.anchorPoints.splice(mode.from + 1, 0, anchor);
+      mode.kind = 'point';
+      mode.anchorIndex = mode.from + 1;
+      this.commit(this.replaceIn(this.getDrawings(), next), { rect: this.strokeDirty(mode.original, next, transform) });
+      return;
+    }
     if (mode.kind === 'anchor') {
       if (isShapeType(mode.original.drawingType) || isChannel) this.shapeCorner(point, transform, mode, next, snapActive);
       else this.moveAnchor(point, transform, mode, next, mods, snapActive);
@@ -288,6 +312,19 @@ export class DrawingInteraction {
       if (id === this.mode?.id) return;
       const drawing = this.registry.get(id);
       if (!drawing || drawing.locked || this.layers?.isHidden(id)) return;
+      if (isStrokeType(drawing.drawingType)) {
+        // Stroke anchors are time-sorted: binary search the ±threshold window
+        // instead of walking every point of a dense stroke.
+        const from = Math.max(0, lowerBound(drawing.anchorPoints, Math.min(t0, t1)) - 1);
+        const to = Math.min(drawing.anchorPoints.length - 1, lowerBound(drawing.anchorPoints, Math.max(t0, t1)) + 1);
+        for (let i = from; i <= to; i += 1) {
+          const candidate = drawing.anchorPoints[i];
+          const p = transform.anchorToPixel(candidate); if (!p) continue;
+          const d = Math.hypot(p.x - point.x, p.y - point.y);
+          if (d <= bestDistance) { bestDistance = d; best = candidate; }
+        }
+        return;
+      }
       drawing.anchorPoints.forEach((candidate) => {
         const p = transform.anchorToPixel(candidate); if (!p) return;
         const d = Math.hypot(p.x - point.x, p.y - point.y);
@@ -355,6 +392,137 @@ export class DrawingInteraction {
     const drawings = this.getDrawings(); if (!drawings.length) return;
     this.history.execute({ label: 'Clear drawings', apply: () => this.commit([]), revert: () => this.commit(drawings) });
     this.selection.clear();
+  }
+
+  // --- Stroke (brush family) editing --------------------------------------
+
+  pointEditingId() { return this.pointEditId; }
+  exitPointEdit() { this.pointEditId = null; return null; }
+
+  // Enter point-edit mode for a stroke drawing. Freehand strokes are first
+  // converted to a smoothed control path (raw:false) so every anchor is an
+  // editable control point; path/polyline/curve/arc keep their anchors.
+  togglePointEdit(id) {
+    const drawing = this.registry.get(id);
+    if (!drawing || !isStrokeType(drawing.drawingType)) return this.exitPointEdit();
+    if (this.pointEditId === id) return this.exitPointEdit();
+    if (drawing.brush?.raw !== false && drawing.drawingType !== 'polyline') {
+      const transform = this.getTransform(); if (!transform) return this.exitPointEdit();
+      const next = convertToSmooth(drawing, transform);
+      this.history.execute({
+        label: 'Convert stroke to path',
+        apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+        revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+      });
+    }
+    this.pointEditId = id;
+    this.selection.replace([id]);
+    return id;
+  }
+
+  // Erase operation (eraser tool): stroke targets are partially erased and
+  // auto-split; everything else is deleted when touched. One undoable group.
+  erase(eraserDrawing) {
+    const transform = this.getTransform(); if (!transform) return;
+    const targets = [...this.getDrawings()].filter((d) => d.id !== eraserDrawing.id);
+    const affected = targets.filter((d) => {
+      if (isStrokeType(d.drawingType)) return eraseStroke(d, eraserDrawing, transform) !== null;
+      return eraseTouches(d, eraserDrawing, transform);
+    });
+    if (!affected.length) return;
+    const before = this.getDrawings();
+    this.history.beginGroup('Erase drawings');
+    affected.forEach((target) => {
+      if (isStrokeType(target.drawingType)) {
+        const fragments = eraseStroke(target, eraserDrawing, transform);
+        if (!fragments) return;
+        if (!fragments.length) {
+          this.history.execute({
+            label: 'Erase drawing',
+            apply: () => this.commit(this.getDrawings().filter((item) => item.id !== target.id)),
+            revert: () => this.commit([...this.getDrawings(), target]),
+          });
+        } else {
+          this.history.execute({
+            label: 'Erase drawing',
+            apply: () => this.commit([...this.getDrawings().filter((item) => item.id !== target.id), ...fragments]),
+            revert: () => this.commit(this.getDrawings().filter((item) => !fragments.some((f) => f.id === item.id) && item.id !== target.id).concat(target)),
+          });
+        }
+      } else {
+        this.history.execute({
+          label: 'Erase drawing',
+          apply: () => this.commit(this.getDrawings().filter((item) => item.id !== target.id)),
+          revert: () => this.commit([...this.getDrawings(), target]),
+        });
+      }
+    });
+    this.history.endGroup();
+    return before.length !== this.getDrawings().length || affected.length > 0;
+  }
+
+  // Context-menu point ops: target the control point nearest the click.
+  nearestControlPoint(id, x, y) {
+    const drawing = this.registry.get(id); if (!drawing || drawing.locked) return null;
+    const transform = this.getTransform(); if (!transform) return null;
+    const pixels = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
+    if (!pixels.length) return null;
+    let best = 0; let bestDist = Infinity;
+    pixels.forEach((p, index) => {
+      const d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
+      if (d < bestDist) { bestDist = d; best = index; }
+    });
+    return { index: best, screen: pixels[best] };
+  }
+
+  insertAnchorAt(id, x, y) {
+    const drawing = this.registry.get(id); if (!drawing || !isStrokeType(drawing.drawingType)) return;
+    const transform = this.getTransform(); if (!transform) return;
+    const near = this.nearestControlPoint(id, x, y);
+    if (!near) return;
+    const at = near.index;
+    const anchor = transform.pixelToAnchor(x, y);
+    const next = clone(drawing);
+    next.anchorPoints.splice(at + 1, 0, anchor);
+    this.history.execute({
+      label: 'Insert anchor',
+      apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+      revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+    });
+  }
+
+  deleteAnchorAt(id, x, y) {
+    const drawing = this.registry.get(id); if (!drawing || !isStrokeType(drawing.drawingType)) return;
+    const near = this.nearestControlPoint(id, x, y);
+    if (!near || drawing.anchorPoints.length <= 2) return;
+    const next = { ...clone(drawing), anchorPoints: drawing.anchorPoints.filter((_, i) => i !== near.index) };
+    this.history.execute({
+      label: 'Delete anchor',
+      apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+      revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+    });
+  }
+
+  // smooth=true: the anchor becomes a smooth curve point; false: a corner.
+  convertAnchorAt(id, x, y, smooth) {
+    const drawing = this.registry.get(id); if (!drawing || !isStrokeType(drawing.drawingType)) return;
+    const near = this.nearestControlPoint(id, x, y);
+    if (!near) return;
+    const next = clone(drawing);
+    next.brush = { ...(next.brush || {}), raw: false };
+    const flags = Array.isArray(next.brush.smooth) ? [...next.brush.smooth] : [];
+    while (flags.length < next.anchorPoints.length) flags.push(true);
+    flags[near.index] = smooth;
+    next.brush.smooth = flags;
+    this.history.execute({
+      label: smooth ? 'Smooth anchor' : 'Sharp anchor',
+      apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+      revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+    });
+  }
+
+  strokeDirty(before, after, transform) {
+    return this.layers.dirtyRect(before, after, transform);
   }
 
   undo() { if (this.history.undo()) this.selection.prune(this.registry.ids()); }

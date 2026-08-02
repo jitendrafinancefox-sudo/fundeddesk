@@ -1,14 +1,14 @@
 'use client';
-import { Settings2, Copy, ClipboardPaste, Trash2, Lock, LockOpen, EyeOff, ArrowUpToLine, ArrowDownToLine, Eraser, MoveHorizontal, Tag, BadgeDollarSign } from 'lucide-react';
+import { Settings2, Copy, ClipboardPaste, Trash2, Lock, LockOpen, EyeOff, ArrowUpToLine, ArrowDownToLine, Eraser, MoveHorizontal, Tag, BadgeDollarSign, MousePointer2, Plus, Minus, Spline } from 'lucide-react';
 
 // TradingView-style object context menu. Rendered inside the chart wrapper at
 // the right-click position; actions dispatch through ChartCanvas which owns
 // the interaction instance. Position is clamped to the chart bounds so the
 // menu never spills out of the canvas. Zone drawings get extra toggles for
 // band extension and label visibility; channels for band extension, dash
-// and arrows.
-export default function ChartContextMenu({ x, y, id, locked, hidden, zone = null, channel = null, hasClipboard, bounds, onAction, onClose }) {
-  const rows = 7 + (zone ? 4 : 0) + (channel ? 4 : 0);
+// and arrows; stroke drawings for control-point editing.
+export default function ChartContextMenu({ x, y, id, locked, hidden, zone = null, channel = null, stroke = null, hasClipboard, bounds, onAction, onClose }) {
+  const rows = 7 + (zone ? 4 : 0) + (channel ? 4 : 0) + (stroke ? 5 : 0);
   const height = rows * 34 + 14;
   const left = Math.max(4, Math.min(x, (bounds?.width || 800) - 184 - 4));
   const top = Math.max(4, Math.min(y, (bounds?.height || 440) - height - 4));
@@ -50,6 +50,13 @@ export default function ChartContextMenu({ x, y, id, locked, hidden, zone = null
           <Item icon={MoveHorizontal} label="Extend Right" checked={channel.extendRight !== false} action="zoneExtendRight" />
           <Item icon={Eraser} label="Dashed" checked={channel.dash} action="channelDash" />
           <Item icon={ArrowUpToLine} label="Arrows" checked={channel.arrow} action="channelArrow" />
+        </>}
+        {stroke && <>
+          <Item icon={MousePointer2} label={stroke.editing ? 'Exit Point Edit' : 'Edit Points'} action="editPoints" />
+          <Item icon={Plus} label="Insert Anchor" action="pointInsert" />
+          <Item icon={Minus} label="Delete Anchor" disabled={stroke.points <= 2} action="pointDelete" />
+          <Item icon={Spline} label="Smooth Point" action="pointSmooth" />
+          <Item icon={Spline} label="Sharp Point" action="pointSharp" />
         </>}
       </> : <>
         <Item icon={ClipboardPaste} label="Paste" disabled={!hasClipboard} action="paste" />

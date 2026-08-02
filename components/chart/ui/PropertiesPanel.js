@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { X, Lock, LockOpen, ArrowUp, ArrowDown, Plus, RotateCcw } from 'lucide-react';
-import { drawingLabelFor, isZoneType, isChannelType, isFibType, zoneColorFor } from '../drawing/DrawingDefinitions';
+import { X, Lock, LockOpen, ArrowUp, ArrowDown, Plus, RotateCcw, MousePointer2 } from 'lucide-react';
+import { drawingLabelFor, isZoneType, isChannelType, isFibType, isStrokeType, zoneColorFor } from '../drawing/DrawingDefinitions';
 import { fibLevelManager } from '../drawing/FibLevelManager';
 
 const COLORS = ['#f5b93e', '#4d7cfe', '#ef4444', '#22c55e', '#a855f7', '#ec4899', '#eab308', '#f8fafc'];
@@ -14,10 +14,11 @@ const WIDTHS = [1, 1.5, 2, 3];
 // band-extension controls; channels get band opacity, extension, dash and
 // arrow controls; Fibonacci drawings get a full level editor (visibility,
 // colors, custom ratios, reordering, label format and position).
-export default function PropertiesPanel({ drawing, onStyle, onFib, onLockToggle, onClose }) {
+export default function PropertiesPanel({ drawing, onStyle, onFib, onLockToggle, onPointEdit, onClose }) {
   const zone = isZoneType(drawing.drawingType);
   const channel = isChannelType(drawing.drawingType);
   const fib = isFibType(drawing.drawingType);
+  const stroke = isStrokeType(drawing.drawingType);
   const baseColor = zone ? zoneColorFor(drawing.drawingType) : '#f5b93e';
   const [color, setColor] = useState(drawing.style?.color || baseColor);
   const [lineWidth, setLineWidth] = useState(drawing.style?.lineWidth || 1.5);
@@ -28,13 +29,16 @@ export default function PropertiesPanel({ drawing, onStyle, onFib, onLockToggle,
   const [showPrice, setShowPrice] = useState(drawing.style?.showPrice !== false);
   const [dash, setDash] = useState(Boolean(drawing.style?.dash));
   const [arrow, setArrow] = useState(Boolean(drawing.style?.arrow));
+  const [taper, setTaper] = useState(drawing.brush?.taper !== false);
+  const [smooth, setSmooth] = useState(drawing.brush?.smooth === false ? false : drawing.brush?.raw !== true);
   const [locked, setLocked] = useState(Boolean(drawing.locked));
   const [levels, setLevels] = useState(fibLevelManager.levelsFor(drawing));
   const [labelFormat, setLabelFormat] = useState(drawing.fib?.label?.format || 'both');
   const [labelPosition, setLabelPosition] = useState(drawing.fib?.label?.position || 'auto');
   const [customValue, setCustomValue] = useState('');
-  useEffect(() => { setColor(drawing.style?.color || (isZoneType(drawing.drawingType) ? zoneColorFor(drawing.drawingType) : '#f5b93e')); setLineWidth(drawing.style?.lineWidth || 1.5); setOpacity(drawing.style?.opacity ?? 0.22); setExtendLeft(drawing.style?.extendLeft !== false); setExtendRight(drawing.style?.extendRight !== false); setShowLabel(drawing.style?.showLabel !== false); setShowPrice(drawing.style?.showPrice !== false); setDash(Boolean(drawing.style?.dash)); setArrow(Boolean(drawing.style?.arrow)); setLocked(Boolean(drawing.locked)); setLevels(fibLevelManager.levelsFor(drawing)); setLabelFormat(drawing.fib?.label?.format || 'both'); setLabelPosition(drawing.fib?.label?.position || 'auto'); setCustomValue(''); }, [drawing.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setColor(drawing.style?.color || (isZoneType(drawing.drawingType) ? zoneColorFor(drawing.drawingType) : '#f5b93e')); setLineWidth(drawing.style?.lineWidth || 1.5); setOpacity(drawing.style?.opacity ?? 0.22); setExtendLeft(drawing.style?.extendLeft !== false); setExtendRight(drawing.style?.extendRight !== false); setShowLabel(drawing.style?.showLabel !== false); setShowPrice(drawing.style?.showPrice !== false); setDash(Boolean(drawing.style?.dash)); setArrow(Boolean(drawing.style?.arrow)); setTaper(drawing.brush?.taper !== false); setSmooth(drawing.brush?.smooth === false ? false : drawing.brush?.raw !== true); setLocked(Boolean(drawing.locked)); setLevels(fibLevelManager.levelsFor(drawing)); setLabelFormat(drawing.fib?.label?.format || 'both'); setLabelPosition(drawing.fib?.label?.position || 'auto'); setCustomValue(''); }, [drawing.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (patch) => onStyle(patch);
+  const brushPatch = (patch) => onStyle({ brush: { ...(drawing.brush || {}), ...patch } });
   const fibPatch = (nextDrawing) => onFib && onFib({ levels: nextDrawing.fib.levels });
   const row = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 };
   const toggle = (label, value, onPick) => (
@@ -119,6 +123,15 @@ export default function PropertiesPanel({ drawing, onStyle, onFib, onLockToggle,
               ))}
             </div>
           </div>
+        </div>
+      </>}
+      {stroke && <>
+        <div style={{ marginTop: 8, borderTop: '1px solid var(--line)', paddingTop: 6 }}>
+          {toggle('Tapered ends', taper, (v) => { setTaper(v); brushPatch({ taper: v }); })}
+          {toggle('Smooth path', smooth, (v) => { setSmooth(v); brushPatch({ smooth: v ? undefined : false, raw: v ? false : true }); })}
+          <button onClick={() => { onClose(); onPointEdit && onPointEdit(drawing.id); }} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', fontSize: 11.5, color: 'var(--blue)', padding: '3px 0' }}>
+            <MousePointer2 size={12} />Edit control points
+          </button>
         </div>
       </>}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
