@@ -29,7 +29,7 @@ export class CanvasChartEngine {
     ];
   }
   renderScene() {
-    const transform = createCoordinateTransform(this.viewport, this.scene.candles); const visibleRange = this.viewport.getVisibleRange();
+    const transform = this.transform(); const visibleRange = this.viewport.getVisibleRange();
     let drawings = queryVisibleDrawings(this.scene.drawings, transform);
     if (this.spatialQuery && this.scene.candles.length) {
       const fromIndex = Math.max(0, Math.floor(visibleRange.from)); const toIndex = Math.min(this.scene.candles.length - 1, Math.ceil(visibleRange.to));
@@ -37,11 +37,18 @@ export class CanvasChartEngine {
       if (fromTime != null && toTime != null) { const ids = new Set(this.spatialQuery(fromTime, toTime)); drawings = this.scene.drawings.filter((drawing) => ids.has(drawing.id)); }
     }
     const selected = new Set(this.scene.selectedIds);
-    return { ...this.scene, viewport: this.viewport, transform, visibleCandles: queryVisibleCandles(this.scene.candles, visibleRange), drawings, selectedDrawings: this.scene.drawings.filter((drawing) => selected.has(drawing.id)) };
+    const visibleCandles = queryVisibleCandles(this.scene.candles, visibleRange);
+    return {
+      ...this.scene, viewport: this.viewport, transform,
+      visibleCandles,
+      priceTicks: this.viewport.priceScale.getTicks(),
+      timeTicks: this.viewport.timeScale.getTicks(visibleCandles),
+      drawings, selectedDrawings: this.scene.drawings.filter((drawing) => selected.has(drawing.id)),
+    };
   }
   setSpatialQuery(fn) { this.spatialQuery = fn; }
   resize(width, height, ratio = window.devicePixelRatio || 1) {
-    this.viewport.setSize(width, height); this.canvas.width = Math.max(1, Math.floor(width * ratio)); this.canvas.height = Math.max(1, Math.floor(height * ratio)); this.canvas.style.width = `${width}px`; this.canvas.style.height = `${height}px`;
+    this.viewport.setSize(width, height, ratio); this.canvas.width = Math.max(1, Math.floor(width * ratio)); this.canvas.height = Math.max(1, Math.floor(height * ratio)); this.canvas.style.width = `${width}px`; this.canvas.style.height = `${height}px`;
     const ctx = this.canvas.getContext('2d'); ctx?.setTransform(ratio, 0, 0, ratio, 0, 0); this.syncViewport(); this.pipeline.invalidate('full');
   }
   setCandles(candles) { this.scene.candles = candles; this.viewport.setData(candles); this.syncViewport(); this.pipeline.invalidate('full'); }
