@@ -1,12 +1,9 @@
 'use client';
 import { snapAnchor } from '../engine/SnappingEngine';
+import { anchorCountFor } from './DrawingDefinitions';
 
 // Screen-space to market-coordinate conversion for tool placement.
 function anchorFromPoint(transform, point) { return transform.pixelToAnchor(point.x, point.y); }
-
-// The anchor-count contract mirrors the legacy DrawingEngine: horizontal
-// lines and text notes place with a single anchor; everything else drags two.
-const SINGLE_ANCHOR_TOOLS = new Set(['hline', 'vline', 'text']);
 
 export function createToolManager({ getTransform, getCandles, createDrawing }) {
   let pending = null; // { tool, start, end, drawing }
@@ -33,7 +30,7 @@ export function createToolManager({ getTransform, getCandles, createDrawing }) {
       pending.end = snapAnchor(anchorFromPoint(transform, point), candles, snap);
       pending.drawing = createDrawing({
         drawingType: pending.tool,
-        anchorPoints: SINGLE_ANCHOR_TOOLS.has(pending.tool) ? [pending.start] : [pending.start, pending.end],
+        anchorPoints: anchorCountFor(pending.tool) === 1 ? [pending.start] : [pending.start, pending.end],
       });
       return pending.drawing;
     },

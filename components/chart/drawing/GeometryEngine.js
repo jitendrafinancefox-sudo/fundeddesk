@@ -54,15 +54,10 @@ export function pointInEllipse(point, center, radiusX, radiusY) {
 
 // True when the drawing's geometry passes within `threshold` pixels of the
 // point. Type-aware: lines use segment distance, shapes use containment.
+// Delegates to the per-tool definitions so hit behavior stays in one place.
+import { hitTestDrawing } from './DrawingDefinitions';
 export function drawingHit(drawing, point, transform, threshold = 7) {
-  const points = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
-  if (!points.length) return false;
-  const [a, b = a] = points;
-  if (drawing.drawingType === 'rect') return pointInRect(point, rectFromPoints([a, b]), threshold);
-  if (drawing.drawingType === 'ellipse') return pointInEllipse(point, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, Math.abs(b.x - a.x) / 2 + threshold, Math.abs(b.y - a.y) / 2 + threshold);
-  if (drawing.drawingType === 'hline') return Math.abs(point.y - a.y) <= threshold;
-  if (drawing.drawingType === 'vline') return Math.abs(point.x - a.x) <= threshold;
-  return distanceToSegment(point, a, b) <= threshold;
+  return hitTestDrawing(drawing, point, transform, threshold);
 }
 
 // Anchor-proximity hit (the drag handle): true when any anchor is within
