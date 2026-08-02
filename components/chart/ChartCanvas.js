@@ -18,7 +18,8 @@ import { createHitTestEngine } from './interaction/HitTestEngine';
 import { createHoverManager } from './interaction/HoverManager';
 import { createCursorManager } from './interaction/CursorManager';
 import { createKeyboardShortcutManager } from './interaction/KeyboardShortcutManager';
-import { isShapeType, isZoneType, normalizeShapeAnchors } from './drawing/DrawingDefinitions';
+import { isShapeType, isZoneType, isChannelType, normalizeShapeAnchors } from './drawing/DrawingDefinitions';
+import { isRegressionType, fitLinearRegression } from './drawing/ChannelGeometry';
 import ChartContextMenu from './ui/ChartContextMenu';
 import PropertiesPanel from './ui/PropertiesPanel';
 
@@ -103,7 +104,13 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     toolManagerRef.current = createToolManager({
       getTransform: () => engine.transform(),
       getCandles: () => candlesRef.current,
-      createDrawing: (options) => createDrawing({ symbol, timeframe, ...options }),
+      createDrawing: (options) => {
+        const drawing = createDrawing({ symbol, timeframe, ...options });
+        if (isRegressionType(drawing.drawingType) && drawing.anchorPoints.length >= 2) {
+          drawing.regression = fitLinearRegression(candlesRef.current, drawing.anchorPoints[0].time, drawing.anchorPoints[1].time);
+        }
+        return drawing;
+      },
     });
     toolManagerRef.current.configure({ magnet: true, mode: 'ohlc' });
 
@@ -166,6 +173,8 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
       const current = menuDrawing?.style?.[key];
       interaction?.updateStyle(id, { [key]: current === false });
     }
+    else if (action === 'channelDash' && id) interaction?.updateStyle(id, { dash: !menuDrawing?.style?.dash });
+    else if (action === 'channelArrow' && id) interaction?.updateStyle(id, { arrow: !menuDrawing?.style?.arrow });
   };
   const axisDragRef = useRef(null);
   function zoneAt(p) {
@@ -190,8 +199,12 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
         applyCursor();
         return;
       }
-      const preview = toolManagerRef.current?.begin(tool, p);
-      engineRef.current?.setPendingDrawing(preview || null);
+      // Tool placement: the first press begins the drawing; later presses
+      // commit channel width / extra anchors and can complete the placement.
+      const active = toolManagerRef.current?.isActive();
+      const result = active ? toolManagerRef.current?.click(p) : toolManagerRef.current?.begin(tool, p);
+      if (result) { engineRef.current?.setPendingDrawing(null); drawingInteractionRef.current?.place(result); }
+      else engineRef.current?.setPendingDrawing(toolManagerRef.current?.pendingDrawing() || null);
       applyCursor();
     }}
     onPointerMove={(event) => {
@@ -203,7 +216,7 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
       if (toolManagerRef.current?.isActive()) {
         const prev = toolManagerRef.current.pendingDrawing();
         const next = toolManagerRef.current.update(p);
-        const rect = prev && next && !isZoneType(prev.drawingType) ? layersRef.current?.dirtyRect(prev, next, engine.transform()) : null;
+        const rect = prev && next && !isZoneType(prev.drawingType) && !isChannelType(prev.drawingType) ? layersRef.current?.dirtyRect(prev, next, engine.transform()) : null;
         engine.setPendingDrawing(next, rect || null);
         hoverManagerRef.current?.clear();
         applyCursor();
@@ -219,9 +232,10 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
       if (axisDragRef.current) { axisDragRef.current = null; applyCursor(); return; }
       if (dragRef.current) { dragRef.current = null; interactionRef.current?.endPan(); applyCursor(); return; }
       if (toolManagerRef.current?.isActive()) {
-        const drawing = toolManagerRef.current.finish();
-        engineRef.current?.setPendingDrawing(null);
-        if (drawing) drawingInteractionRef.current?.place(drawing);
+        const final = toolManagerRef.current.release();
+        const pending = toolManagerRef.current.pendingDrawing();
+        engineRef.current?.setPendingDrawing(pending || null);
+        if (final) drawingInteractionRef.current?.place(final);
         applyCursor();
         return;
       }
@@ -248,7 +262,7 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     onWheel={(event) => { event.preventDefault(); interactionRef.current?.zoom(event.deltaY, point(event).x); }}
     style={{ display: 'block', width: '100%', height, touchAction: 'none' }}
   />
-    {contextMenu && <ChartContextMenu x={contextMenu.x} y={contextMenu.y} id={contextMenu.id} locked={menuDrawing?.locked} hidden={menuDrawing?.hidden} zone={menuDrawing && isZoneType(menuDrawing.drawingType) ? { extendLeft: menuDrawing.style?.extendLeft !== false, extendRight: menuDrawing.style?.extendRight !== false, showLabel: menuDrawing.style?.showLabel !== false, showPrice: menuDrawing.style?.showPrice !== false } : null} hasClipboard={Boolean(drawingInteractionRef.current?.clipboard?.length)} bounds={contextMenu.bounds} onAction={runMenuAction} onClose={() => setContextMenu(null)} />}
+    {contextMenu && <ChartContextMenu x={contextMenu.x} y={contextMenu.y} id={contextMenu.id} locked={menuDrawing?.locked} hidden={menuDrawing?.hidden} zone={menuDrawing && isZoneType(menuDrawing.drawingType) ? { extendLeft: menuDrawing.style?.extendLeft !== false, extendRight: menuDrawing.style?.extendRight !== false, showLabel: menuDrawing.style?.showLabel !== false, showPrice: menuDrawing.style?.showPrice !== false } : null} channel={menuDrawing && isChannelType(menuDrawing.drawingType) ? { extendLeft: menuDrawing.style?.extendLeft !== false, extendRight: menuDrawing.style?.extendRight !== false, dash: Boolean(menuDrawing.style?.dash), arrow: Boolean(menuDrawing.style?.arrow) } : null} hasClipboard={Boolean(drawingInteractionRef.current?.clipboard?.length)} bounds={contextMenu.bounds} onAction={runMenuAction} onClose={() => setContextMenu(null)} />}
     {propertiesDrawing && <PropertiesPanel drawing={propertiesDrawing} onStyle={(patch) => drawingInteractionRef.current?.updateStyle(propertiesDrawing.id, patch)} onLockToggle={(locked) => (locked ? drawingInteractionRef.current?.lock([propertiesDrawing.id]) : drawingInteractionRef.current?.unlock([propertiesDrawing.id]))} onClose={() => setProperties(null)} />}
   </div>;
 }

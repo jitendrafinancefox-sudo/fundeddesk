@@ -14,6 +14,8 @@
 import {
   polygonCorners, polygonBounds, polygonCenter, pointInPolygon, distanceToPolygon,
 } from './ShapeGeometry';
+import { channelGeometry, channelHitTest, extendLine, extendFlat } from './ChannelGeometry';
+export { isChannelType } from './ChannelGeometry';
 
 const FIB_RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 const fmtRatio = (ratio) => ratio.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
@@ -141,6 +143,42 @@ export const DRAWING_DEFINITIONS = {
     render: (ctx, a, b, drawing, transform) => { renderZone(ctx, drawing, transform); },
     hitTest: (drawing, point, transform, threshold) => zoneHit(drawing, point, transform, threshold),
   },
+  parallelChannel: {
+    label: 'Parallel Channel',
+    anchorCount: 3, channel: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => { renderChannel(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => channelHitTest(drawing, point, transform, threshold),
+  },
+  flatTopChannel: {
+    label: 'Flat Top Channel',
+    anchorCount: 3, channel: true, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => { renderChannel(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => channelHitTest(drawing, point, transform, threshold),
+  },
+  flatBottomChannel: {
+    label: 'Flat Bottom Channel',
+    anchorCount: 3, channel: true, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => { renderChannel(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => channelHitTest(drawing, point, transform, threshold),
+  },
+  disjointChannel: {
+    label: 'Disjoint Channel',
+    anchorCount: 4, channel: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => { renderChannel(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => channelHitTest(drawing, point, transform, threshold),
+  },
+  regressionChannel: {
+    label: 'Regression Channel',
+    anchorCount: 3, channel: true, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => { renderChannel(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => channelHitTest(drawing, point, transform, threshold),
+  },
+  linearRegressionChannel: {
+    label: 'Linear Regression Channel',
+    anchorCount: 3, channel: true, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => { renderChannel(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => channelHitTest(drawing, point, transform, threshold),
+  },
   ray: {
     label: 'Ray',
     anchorCount: 2,
@@ -230,9 +268,6 @@ export const DRAWING_DEFINITIONS = {
       });
     },
   },
-  brush: { label: 'Brush', anchorCount: 2 },
-  parallelChannel: { label: 'Parallel Channel', anchorCount: 2 },
-  pitchfork: { label: 'Pitchfork', anchorCount: 2 },
 };
 
 // Zone band rendering: translucent fill + top/bottom borders + labels.
@@ -297,6 +332,91 @@ function zoneHit(drawing, point, transform, threshold) {
 
 const clamp01 = (value) => Math.max(0, Math.min(1, value));
 
+// Channel painter: fills the band, strokes the channel lines (with the
+// center line thinner and fainter), honors extend flags, dash style,
+// opacity and arrow style on the base line. Shared by the ChannelRenderer
+// thread and the preview path via renderDrawing.
+function renderChannel(ctx, drawing, transform) {
+  const geo = channelGeometry(drawing, transform);
+  if (!geo) return;
+  const style = drawing.style || {};
+  const color = style.color || '#4d7cfe';
+  const lineWidth = style.lineWidth || 1.5;
+  const dash = style.dash ? [6, 4] : [];
+  const extendLeft = style.extendLeft !== false;
+  const extendRight = style.extendRight !== false;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.fillStyle = color;
+  const strokeLine = (a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+  const band = (lineA, lineB) => {
+    if (style.fill === false) return;
+    ctx.globalAlpha = style.opacity ?? 0.12;
+    ctx.beginPath();
+    ctx.moveTo(lineA.a.x, lineA.a.y); ctx.lineTo(lineA.b.x, lineA.b.y);
+    ctx.lineTo(lineB.b.x, lineB.b.y); ctx.lineTo(lineB.a.x, lineB.a.y);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  };
+  const arrow = (a, b) => {
+    if (!style.arrow) return;
+    const angle = Math.atan2(b.y - a.y, b.x - a.x);
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - 10 * Math.cos(angle - 0.45), b.y - 10 * Math.sin(angle - 0.45));
+    ctx.lineTo(b.x - 10 * Math.cos(angle + 0.45), b.y - 10 * Math.sin(angle + 0.45));
+    ctx.closePath(); ctx.fill();
+  };
+  if (geo.type === 'parallelChannel' || geo.type === 'regressionChannel') {
+    if (!geo.offA) { ctx.setLineDash(dash); ctx.lineWidth = lineWidth; strokeLine(geo.baseA, geo.baseB); arrow(geo.baseA, geo.baseB); ctx.restore(); return; }
+    const base = extendLine(geo.baseA, geo.baseB, extendLeft, extendRight);
+    const off = extendLine(geo.offA, geo.offB, extendLeft, extendRight);
+    band(base, off);
+    ctx.setLineDash(dash); ctx.lineWidth = lineWidth;
+    strokeLine(base.a, base.b); strokeLine(off.a, off.b); arrow(base.a, base.b);
+    ctx.setLineDash([3, 5]); ctx.lineWidth = 1; ctx.globalAlpha = 0.55;
+    const center = extendLine({ x: geo.center.x - (geo.baseB.x - geo.baseA.x) / 2, y: geo.center.y - (geo.baseB.y - geo.baseA.y) / 2 }, { x: geo.center.x + (geo.baseB.x - geo.baseA.x) / 2, y: geo.center.y + (geo.baseB.y - geo.baseA.y) / 2 }, extendLeft, extendRight);
+    strokeLine(center.a, center.b);
+    ctx.restore();
+    return;
+  }
+  if (geo.type === 'linearRegressionChannel') {
+    if (!geo.upperA || !geo.lowerA) { ctx.setLineDash(dash); ctx.lineWidth = lineWidth; strokeLine(geo.baseA, geo.baseB); arrow(geo.baseA, geo.baseB); ctx.restore(); return; }
+    const upper = extendLine(geo.upperA, geo.upperB, extendLeft, extendRight);
+    const lower = extendLine(geo.lowerA, geo.lowerB, extendLeft, extendRight);
+    const base = extendLine(geo.baseA, geo.baseB, extendLeft, extendRight);
+    band(upper, lower);
+    ctx.setLineDash(dash); ctx.lineWidth = lineWidth;
+    strokeLine(upper.a, upper.b); strokeLine(lower.a, lower.b);
+    ctx.setLineDash([3, 5]); ctx.lineWidth = 1; ctx.globalAlpha = 0.55;
+    strokeLine(base.a, base.b);
+    ctx.restore();
+    return;
+  }
+  if (geo.type === 'flatTopChannel' || geo.type === 'flatBottomChannel') {
+    const xs = [geo.flatPoint.x, geo.slopeA.x, geo.slopeB.x];
+    const flat = extendFlat(geo.flatPoint.y, xs, extendLeft, extendRight);
+    const slope = extendLine(geo.slopeA, geo.slopeB, extendLeft, extendRight);
+    band(flat, slope);
+    ctx.setLineDash(dash); ctx.lineWidth = lineWidth;
+    strokeLine(flat.a, flat.b); strokeLine(slope.a, slope.b);
+    ctx.restore();
+    return;
+  }
+  if (geo.type === 'disjointChannel') {
+    // Partial (2-anchor preview) geometry carries the line as baseA/baseB.
+    if (!geo.line1A || !geo.line2A) {
+      const sA = geo.line1A || geo.baseA; const sB = geo.line1B || geo.baseB;
+      ctx.setLineDash(dash); ctx.lineWidth = lineWidth; strokeLine(sA, sB); arrow(sA, sB); ctx.restore(); return;
+    }
+    const l1 = extendLine(geo.line1A, geo.line1B, extendLeft, extendRight);
+    const l2 = extendLine(geo.line2A, geo.line2B, extendLeft, extendRight);
+    band(l1, l2);
+    ctx.setLineDash(dash); ctx.lineWidth = lineWidth;
+    strokeLine(l1.a, l1.b); strokeLine(l2.a, l2.b);
+    ctx.restore();
+  }
+}
+
 function distanceToSegment(point, a, b) {
   const dx = b.x - a.x; const dy = b.y - a.y;
   const length = dx * dx + dy * dy;
@@ -304,8 +424,7 @@ function distanceToSegment(point, a, b) {
   return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
 }
 
-export const anchorCountFor = (drawingType) => DRAWING_DEFINITIONS[drawingType]?.anchorCount ?? 2;
-export const drawingLabelFor = (drawingType) => DRAWING_DEFINITIONS[drawingType]?.label || drawingType;
+export const anchorCountFor = (drawingType) => DRAWING_DEFINITIONS[drawingType]?.anchorCount ?? 2;export const drawingLabelFor = (drawingType) => DRAWING_DEFINITIONS[drawingType]?.label || drawingType;
 export const isShapeType = (drawingType) => Boolean(DRAWING_DEFINITIONS[drawingType]?.shape);
 // Convention: every per-tool render receives (ctx, a, b, drawing, transform)
 // where a/b are the first two anchor points projected to screen pixels.

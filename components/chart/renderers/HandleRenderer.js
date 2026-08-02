@@ -55,6 +55,31 @@ export function HandleRenderer({ drawings = [], transform, hover = null, visible
           ctx.strokeStyle = '#4d7cfe';
           ctx.beginPath(); ctx.arc(geometry.rotation.x, geometry.rotation.y, active ? 6 : 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         }
+      } else if (geometry.channel) {
+        geometry.anchors.forEach((anchor) => {
+          const active = isHovered(drawing.id, 'anchor', anchor.index);
+          ctx.fillStyle = active ? '#4d7cfe' : '#ffffff';
+          ctx.strokeStyle = '#4d7cfe';
+          square(anchor.x, anchor.y, active ? 9 : 7, true);
+        });
+        if (geometry.widthHandle) {
+          const active = isHovered(drawing.id, 'width', -1);
+          ctx.fillStyle = active ? '#ffffff' : '#4d7cfe';
+          ctx.strokeStyle = '#4d7cfe';
+          ctx.beginPath(); ctx.arc(geometry.widthHandle.x, geometry.widthHandle.y, active ? 6 : 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        if (geometry.center) {
+          const active = isHovered(drawing.id, 'center', -1);
+          ctx.fillStyle = active ? '#ffffff' : '#4d7cfe';
+          ctx.strokeStyle = '#4d7cfe';
+          square(geometry.center.x, geometry.center.y, active ? 9 : 6, false);
+        }
+        if (geometry.rotation) {
+          const active = isHovered(drawing.id, 'rotation', -1);
+          ctx.fillStyle = active ? '#ffffff' : '#4d7cfe';
+          ctx.strokeStyle = '#4d7cfe';
+          ctx.beginPath(); ctx.arc(geometry.rotation.x, geometry.rotation.y, active ? 5 : 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
       } else {
         geometry.anchors.forEach((anchor) => {
           const active = isHovered(drawing.id, 'anchor', anchor.index);

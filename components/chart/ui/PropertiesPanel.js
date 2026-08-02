@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { X, Lock, LockOpen } from 'lucide-react';
-import { drawingLabelFor, isZoneType, zoneColorFor } from '../drawing/DrawingDefinitions';
+import { drawingLabelFor, isZoneType, isChannelType, zoneColorFor } from '../drawing/DrawingDefinitions';
 
 const COLORS = ['#f5b93e', '#4d7cfe', '#ef4444', '#22c55e', '#a855f7', '#ec4899', '#eab308', '#f8fafc'];
 const WIDTHS = [1, 1.5, 2, 3];
@@ -10,9 +10,11 @@ const WIDTHS = [1, 1.5, 2, 3];
 // Every change is applied through the interaction (one undoable history
 // delta per change). Local state mirrors the drawing so the panel stays
 // responsive while the canvas updates. Zone drawings get fill opacity and
-// band-extension controls.
+// band-extension controls; channels get band opacity, extension, dash and
+// arrow controls.
 export default function PropertiesPanel({ drawing, onStyle, onLockToggle, onClose }) {
   const zone = isZoneType(drawing.drawingType);
+  const channel = isChannelType(drawing.drawingType);
   const baseColor = zone ? zoneColorFor(drawing.drawingType) : '#f5b93e';
   const [color, setColor] = useState(drawing.style?.color || baseColor);
   const [lineWidth, setLineWidth] = useState(drawing.style?.lineWidth || 1.5);
@@ -21,8 +23,10 @@ export default function PropertiesPanel({ drawing, onStyle, onLockToggle, onClos
   const [extendRight, setExtendRight] = useState(drawing.style?.extendRight !== false);
   const [showLabel, setShowLabel] = useState(drawing.style?.showLabel !== false);
   const [showPrice, setShowPrice] = useState(drawing.style?.showPrice !== false);
+  const [dash, setDash] = useState(Boolean(drawing.style?.dash));
+  const [arrow, setArrow] = useState(Boolean(drawing.style?.arrow));
   const [locked, setLocked] = useState(Boolean(drawing.locked));
-  useEffect(() => { setColor(drawing.style?.color || (isZoneType(drawing.drawingType) ? zoneColorFor(drawing.drawingType) : '#f5b93e')); setLineWidth(drawing.style?.lineWidth || 1.5); setOpacity(drawing.style?.opacity ?? 0.22); setExtendLeft(drawing.style?.extendLeft !== false); setExtendRight(drawing.style?.extendRight !== false); setShowLabel(drawing.style?.showLabel !== false); setShowPrice(drawing.style?.showPrice !== false); setLocked(Boolean(drawing.locked)); }, [drawing.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setColor(drawing.style?.color || (isZoneType(drawing.drawingType) ? zoneColorFor(drawing.drawingType) : '#f5b93e')); setLineWidth(drawing.style?.lineWidth || 1.5); setOpacity(drawing.style?.opacity ?? 0.22); setExtendLeft(drawing.style?.extendLeft !== false); setExtendRight(drawing.style?.extendRight !== false); setShowLabel(drawing.style?.showLabel !== false); setShowPrice(drawing.style?.showPrice !== false); setDash(Boolean(drawing.style?.dash)); setArrow(Boolean(drawing.style?.arrow)); setLocked(Boolean(drawing.locked)); }, [drawing.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (patch) => onStyle(patch);
   const row = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 };
   const toggle = (label, value, onPick) => (
@@ -58,6 +62,18 @@ export default function PropertiesPanel({ drawing, onStyle, onLockToggle, onClos
           {toggle('Extend Right', extendRight, (v) => { setExtendRight(v); pick({ extendRight: v }); })}
           {toggle('Show Name', showLabel, (v) => { setShowLabel(v); pick({ showLabel: v }); })}
           {toggle('Show Price', showPrice, (v) => { setShowPrice(v); pick({ showPrice: v }); })}
+        </div>
+      </>}
+      {channel && <>
+        <div style={{ ...row, marginTop: 10 }}>
+          <span className="dim" style={{ width: 62 }}>Opacity</span>
+          <input type="range" min={0.02} max={0.5} step={0.02} value={opacity} onChange={(e) => { const value = Number(e.target.value); setOpacity(value); pick({ opacity: value }); }} style={{ flex: 1, accentColor: '#4d7cfe' }} />
+        </div>
+        <div style={{ marginTop: 8, borderTop: '1px solid var(--line)', paddingTop: 6 }}>
+          {toggle('Extend Left', extendLeft, (v) => { setExtendLeft(v); pick({ extendLeft: v }); })}
+          {toggle('Extend Right', extendRight, (v) => { setExtendRight(v); pick({ extendRight: v }); })}
+          {toggle('Dashed', dash, (v) => { setDash(v); pick({ dash: v }); })}
+          {toggle('Arrows', arrow, (v) => { setArrow(v); pick({ arrow: v }); })}
         </div>
       </>}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>

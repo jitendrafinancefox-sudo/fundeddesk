@@ -1,10 +1,10 @@
 'use client';
-import { renderDrawing, isZoneType } from '../drawing/DrawingDefinitions';
+import { renderDrawing, isZoneType, isChannelType } from '../drawing/DrawingDefinitions';
 export function DrawingRenderer({ drawings, transform, selectedId, selectedIds, hoverId }) {
   const selectedSet = selectedIds ? new Set(selectedIds) : null;
   return (ctx) => {
     drawings.forEach((drawing) => {
-      if (isZoneType(drawing.drawingType)) return; // zones render on their own thread
+      if (isZoneType(drawing.drawingType) || isChannelType(drawing.drawingType)) return; // zones/channels render on their own threads
       const points = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
       if (!points.length) return;
       const [a, b = a] = points;

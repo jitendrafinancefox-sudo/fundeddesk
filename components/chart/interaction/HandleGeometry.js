@@ -9,10 +9,14 @@
 // handles, a center move handle and a rotation handle (rotation-ready:
 // a rotate action only needs the position and the existing pixelToAnchor
 // round-trip to convert screen rotation back into market coordinates).
+// Channel tools expose their anchors plus a width handle on the offset
+// line, a center move handle, a midpoint (base line) and a rotation handle.
 import { polygonCorners, polygonCenter, polygonEdges, polygonRotation, rotatePoint } from '../drawing/ShapeGeometry';
+import { channelGeometry, projectPointOnLine, lineNormal } from '../drawing/ChannelGeometry';
 import { DRAWING_DEFINITIONS } from '../drawing/DrawingDefinitions';
 
 const ROTATABLE_TOOLS = new Set(['trend', 'ray', 'extended', 'measure', 'arrow']);
+const midpointOf = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
 export function handleGeometry(drawing, transform) {
   const anchors = drawing.anchorPoints
@@ -32,7 +36,31 @@ export function handleGeometry(drawing, transform) {
       rotatable, angle: polygonRotation(corners),
     };
   }
-  const geometry = { anchors, midpoint: null, rotation: null, rotatable: false };
+  const geometry = { anchors, midpoint: null, rotation: null, rotatable: false, channel: false };
+  if (def?.channel) {
+    geometry.channel = true;
+    const geo = channelGeometry(drawing, transform);
+    if (geo?.baseA && geo?.baseB) {
+      const baseMid = midpointOf(geo.baseA, geo.baseB);
+      geometry.midpoint = baseMid;
+      if (geo.offA && geo.offB) geometry.widthHandle = projectPointOnLine(baseMid, geo.offA, geo.offB);
+      if (geo.center) geometry.center = geo.center;
+      if (def.rotatable !== false) {
+        const n = lineNormal(geo.baseA, geo.baseB);
+        geometry.rotation = { x: baseMid.x + n.nx * 22, y: baseMid.y + n.ny * 22 };
+        geometry.rotatable = true;
+      }
+      return geometry;
+    }
+    if (geo?.type === 'flatTopChannel' || geo?.type === 'flatBottomChannel') {
+      if (geo.flatPoint && geo.slopeA && geo.slopeB) {
+        geometry.center = geo.center || midpointOf(midpointOf(geo.flatPoint, geo.slopeB), midpointOf(geo.slopeA, geo.slopeB));
+        geometry.midpoint = midpointOf(geo.slopeA, geo.slopeB);
+      }
+      return geometry;
+    }
+    return geometry;
+  }
   if (anchors.length >= 2) {
     const a = anchors[0]; const b = anchors[1];
     geometry.midpoint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -58,10 +86,15 @@ export function nearestHandle(drawing, point, transform, threshold = 9) {
     if (distance <= bestDistance) { bestDistance = distance; best = { kind, index, x, y, geometry }; }
   };
   if (geometry.rotation) consider('rotation', -1, geometry.rotation.x, geometry.rotation.y);
+  if (geometry.widthHandle) consider('width', -1, geometry.widthHandle.x, geometry.widthHandle.y);
   if (geometry.shape) {
     consider('center', -1, geometry.center.x, geometry.center.y);
     geometry.edges.forEach((edge, i) => consider('edge', i, edge.mid.x, edge.mid.y));
     geometry.corners.forEach((corner) => consider('anchor', corner.index, corner.x, corner.y));
+  } else if (geometry.channel || geometry.center) {
+    if (geometry.center) consider('center', -1, geometry.center.x, geometry.center.y);
+    if (geometry.midpoint) consider('midpoint', -1, geometry.midpoint.x, geometry.midpoint.y);
+    geometry.anchors.forEach((anchor) => consider('anchor', anchor.index, anchor.x, anchor.y));
   } else {
     if (geometry.midpoint) consider('midpoint', -1, geometry.midpoint.x, geometry.midpoint.y);
     geometry.anchors.forEach((anchor) => consider('anchor', anchor.index, anchor.x, anchor.y));

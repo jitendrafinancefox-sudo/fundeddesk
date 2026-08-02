@@ -21,6 +21,7 @@ export function resolveCursor({ tool, hover, panning = false, axisHover = null }
   if (hover.kind === 'midpoint') return 'move';
   if (hover.kind === 'center') return 'move';
   if (hover.kind === 'body') return 'move';
+  if (hover.kind === 'width') return 'ns-resize';
   if (hover.kind === 'edge') {
     const nx = hover.edge?.nx || 0; const ny = hover.edge?.ny || 0;
     return Math.abs(nx) > Math.abs(ny) ? 'ew-resize' : 'ns-resize';

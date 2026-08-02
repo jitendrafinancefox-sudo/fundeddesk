@@ -5,9 +5,10 @@ import { Settings2, Copy, ClipboardPaste, Trash2, Lock, LockOpen, EyeOff, ArrowU
 // the right-click position; actions dispatch through ChartCanvas which owns
 // the interaction instance. Position is clamped to the chart bounds so the
 // menu never spills out of the canvas. Zone drawings get extra toggles for
-// band extension and label visibility.
-export default function ChartContextMenu({ x, y, id, locked, hidden, zone = null, hasClipboard, bounds, onAction, onClose }) {
-  const rows = 7 + (zone ? 4 : 0);
+// band extension and label visibility; channels for band extension, dash
+// and arrows.
+export default function ChartContextMenu({ x, y, id, locked, hidden, zone = null, channel = null, hasClipboard, bounds, onAction, onClose }) {
+  const rows = 7 + (zone ? 4 : 0) + (channel ? 4 : 0);
   const height = rows * 34 + 14;
   const left = Math.max(4, Math.min(x, (bounds?.width || 800) - 184 - 4));
   const top = Math.max(4, Math.min(y, (bounds?.height || 440) - height - 4));
@@ -43,6 +44,12 @@ export default function ChartContextMenu({ x, y, id, locked, hidden, zone = null
           <Item icon={MoveHorizontal} label="Extend Right" checked={zone.extendRight !== false} action="zoneExtendRight" />
           <Item icon={Tag} label="Show Name" checked={zone.showLabel !== false} action="zoneShowLabel" />
           <Item icon={BadgeDollarSign} label="Show Price" checked={zone.showPrice !== false} action="zoneShowPrice" />
+        </>}
+        {channel && <>
+          <Item icon={MoveHorizontal} label="Extend Left" checked={channel.extendLeft !== false} action="zoneExtendLeft" />
+          <Item icon={MoveHorizontal} label="Extend Right" checked={channel.extendRight !== false} action="zoneExtendRight" />
+          <Item icon={Eraser} label="Dashed" checked={channel.dash} action="channelDash" />
+          <Item icon={ArrowUpToLine} label="Arrows" checked={channel.arrow} action="channelArrow" />
         </>}
       </> : <>
         <Item icon={ClipboardPaste} label="Paste" disabled={!hasClipboard} action="paste" />

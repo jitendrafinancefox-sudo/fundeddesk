@@ -1,7 +1,7 @@
 'use client';
 import { drawingHit } from '../drawing/GeometryEngine';
 import { nearestHandle } from './HandleGeometry';
-import { isZoneType, hitTestDrawing } from '../drawing/DrawingDefinitions';
+import { isZoneType, isChannelType, hitTestDrawing } from '../drawing/DrawingDefinitions';
 
 // Priority-ordered hit testing shared by hover, selection and editing.
 // Handles (rotation > midpoint > anchor) beat line bodies, and drawings are
@@ -42,17 +42,18 @@ export function createHitTestEngine({ registry, getTransform, layers }) {
     }
     return null;
   };
-  // Extended zones paint beyond their anchor span, where the time-bounded
-  // spatial candidates can never find them. This sweep tests the price band
-  // of every zone drawing directly (topmost-first). It is intentionally not
-  // part of `hit`: per-move hover must stay O(candidates), while pointer
-  // presses are infrequent enough to afford the O(zones) sweep.
+  // Extended zones and channels paint beyond their anchor span, where the
+  // time-bounded spatial candidates can never find them. This sweep tests
+  // the band/geometry of those drawings directly (topmost-first). It is
+  // intentionally not part of `hit`: per-move hover must stay O(candidates),
+  // while pointer presses are infrequent enough to afford the O(zones)
+  // sweep.
   const hitZone = (point, { ignoreLock = false } = {}) => {
     const transform = getTransform(); if (!transform) return null;
     const ids = registry.ids();
     for (let i = ids.length - 1; i >= 0; i -= 1) {
       const drawing = registry.get(ids[i]);
-      if (!drawing || !isZoneType(drawing.drawingType) || isExcluded(drawing, ignoreLock)) continue;
+      if (!drawing || !(isZoneType(drawing.drawingType) || isChannelType(drawing.drawingType)) || isExcluded(drawing, ignoreLock)) continue;
       if (hitTestDrawing(drawing, point, transform, 7)) {
         return { id: drawing.id, anchorIndex: -1, kind: 'body', drawingType: drawing.drawingType, screenPoints: project(drawing), edge: null, shape: false };
       }

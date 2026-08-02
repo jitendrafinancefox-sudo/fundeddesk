@@ -1,8 +1,9 @@
 'use client';
 import { unionRect } from '../drawing/GeometryEngine';
 import { snapAnchor } from './SnappingEngine';
-import { isShapeType, isZoneType, normalizeShapeAnchors } from '../drawing/DrawingDefinitions';
+import { isShapeType, isZoneType, isChannelType, normalizeShapeAnchors } from '../drawing/DrawingDefinitions';
 import { polygonCorners, polygonEdges, polygonCenter, resizeEdge } from '../drawing/ShapeGeometry';
+import { channelGeometry, isRegressionType, fitLinearRegression } from '../drawing/ChannelGeometry';
 
 const clone = (value) => structuredClone(value);
 
@@ -83,18 +84,20 @@ export class DrawingInteraction {
     const snapActive = !mods.ctrl;
     if (mode.kind === 'group') { this.moveGroup(point, transform, mode, mods, snapActive); return; }
     const next = clone(mode.original);
+    const isChannel = isChannelType(mode.original.drawingType);
     if (mode.kind === 'anchor') {
-      if (isShapeType(mode.original.drawingType)) this.shapeCorner(point, transform, mode, next, snapActive);
+      if (isShapeType(mode.original.drawingType) || isChannel) this.shapeCorner(point, transform, mode, next, snapActive);
       else this.moveAnchor(point, transform, mode, next, mods, snapActive);
     }
     else if (mode.kind === 'edge') { this.shapeEdge(point, transform, mode, next, snapActive); }
-    else if (mode.kind === 'midpoint') { this.scaleMidpoint(point, transform, mode, next, snapActive); }
+    else if (mode.kind === 'width') { this.widthDrag(point, transform, mode, next, snapActive); }
+    else if (mode.kind === 'midpoint') { if (isChannel) this.moveBody(point, transform, mode, next, snapActive); else this.scaleMidpoint(point, transform, mode, next, snapActive); }
     else if (mode.kind === 'rotation') { this.rotate(point, transform, mode, next); }
     else { this.moveBody(point, transform, mode, next, snapActive); }
-    // Zones paint full-width bands, so a partial repaint can never clear the
-    // previous frame's band edges — dirty-rect edits must fall back to a
-    // full invalidate for them.
-    const rect = isZoneType(mode.original.drawingType) ? null : this.layers.dirtyRect(mode.original, next, transform);
+    // Zones and extended channels paint full-width bands, so a partial
+    // repaint can never clear the previous frame's band edges — dirty-rect
+    // edits must fall back to a full invalidate for them.
+    const rect = isZoneType(mode.original.drawingType) || isChannel ? null : this.layers.dirtyRect(mode.original, next, transform);
     this.commit(this.replaceIn(this.getDrawings(), next), { rect });
   }
 
@@ -124,10 +127,33 @@ export class DrawingInteraction {
   // Shape corner drag: shape anchors ARE the corners (TL, TR, BR, BL for
   // boxes; three points for triangles), so this is a straight anchor move
   // with snapping — the rotated frame is implicit in the corner positions.
+  // Channels use the same path for their anchor handles; regression windows
+  // are refitted to the new anchor times so the fit always follows the data.
   shapeCorner(point, transform, mode, next, snapActive) {
     let anchor = transform.pixelToAnchor(point.x, point.y);
     if (snapActive && this.snap.magnet) anchor = snapAnchor(anchor, this.getCandles(), this.snap);
     next.anchorPoints[mode.anchorIndex] = anchor;
+    if (isRegressionType(next.drawingType) && mode.anchorIndex <= 1) this.refitRegression(next);
+  }
+
+  refitRegression(next) {
+    const fit = fitLinearRegression(this.getCandles(), next.anchorPoints[0].time, next.anchorPoints[1].time);
+    if (fit) next.regression = fit;
+  }
+
+  // Width handle drag: move the offset line's perpendicular distance only.
+  // The offset anchor follows the cursor projected onto the base normal, so
+  // dragging parallel to the base does nothing while the two lines stay
+  // perfectly parallel at any distance.
+  widthDrag(point, transform, mode, next, snapActive) {
+    const geo = channelGeometry(next, transform);
+    if (!geo?.baseA || !geo.baseB || !geo.n) return;
+    const baseMid = { x: (geo.baseA.x + geo.baseB.x) / 2, y: (geo.baseA.y + geo.baseB.y) / 2 };
+    const distance = (point.x - baseMid.x) * geo.n.nx + (point.y - baseMid.y) * geo.n.ny;
+    const px = { x: baseMid.x + geo.n.nx * distance, y: baseMid.y + geo.n.ny * distance };
+    let anchor = transform.pixelToAnchor(px.x, px.y);
+    if (snapActive && this.snap.magnet) anchor = snapAnchor(anchor, this.getCandles(), this.snap);
+    next.anchorPoints[2] = anchor;
   }
 
   // Mid-edge drag: translate the edge's two corners along the edge's
@@ -167,14 +193,16 @@ export class DrawingInteraction {
   }
 
   // Rotation handle drag: rotate every anchor in screen space around the
-  // drawing's pivot — the polygon center for shapes, the midpoint for
-  // lines — then convert back to market coordinates. Angle snapping to 15°
-  // steps while Shift is held.
+  // drawing's pivot — the polygon center for shapes, the channel center for
+  // channels, the midpoint for lines — then convert back to market
+  // coordinates. Angle snapping to 15° steps while Shift is held.
   rotate(point, transform, mode, next) {
     const points = next.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
     if (points.length < 2) return;
-    const isShape = isShapeType(next.drawingType);
-    const pivot = isShape && points.length >= 3 ? polygonCenter(points) : midpointOf(points[0], points[1]);
+    let pivot = null;
+    if (isShapeType(next.drawingType)) pivot = points.length >= 3 ? polygonCenter(points) : midpointOf(points[0], points[1]);
+    else if (isChannelType(next.drawingType)) pivot = channelGeometry(next, transform)?.center || midpointOf(points[0], points[1]);
+    else pivot = midpointOf(points[0], points[1]);
     let delta = Math.atan2(point.y - pivot.y, point.x - pivot.x) - Math.atan2(mode.startCursor.y - pivot.y, mode.startCursor.x - pivot.x);
     const mods = this.getMods() || {};
     if (mods.shift) delta = Math.round(delta / (Math.PI / 12)) * (Math.PI / 12);
@@ -184,6 +212,7 @@ export class DrawingInteraction {
       const dx = p.x - pivot.x; const dy = p.y - pivot.y;
       return transform.pixelToAnchor(pivot.x + dx * cos - dy * sin, pivot.y + dx * sin + dy * cos);
     });
+    if (isRegressionType(next.drawingType)) this.refitRegression(next);
   }
 
   moveGroup(point, transform, mode, mods, snapActive) {
@@ -391,7 +420,7 @@ export class DrawingInteraction {
     return list.map((item) => byId.get(item.id) || item);
   }
   groupDirty(originals, nexts, transform) {
-    if (originals.some((item) => isZoneType(item.drawingType))) return null;
+    if (originals.some((item) => isZoneType(item.drawingType) || isChannelType(item.drawingType))) return null;
     let rect = null;
     for (let i = 0; i < originals.length; i += 1) {
       const part = this.layers.dirtyRect(originals[i], nexts[i], transform);

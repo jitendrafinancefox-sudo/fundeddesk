@@ -1,11 +1,16 @@
 'use client';
 import { drawingPersistence } from '@/services/drawingPersistence';
 import { DRAWING_TYPES } from '../engine/DrawingSchema';
+import { isChannelType, isRegressionType } from './ChannelGeometry';
 
+// v3: channels store 3-4 anchor points (parallel/flat/disjoint layouts plus
+// the regression window) and regression channels carry a fitted line
+// (drawing.regression = { slope, intercept, count }) which the engine
+// refits whenever the window anchors are edited.
 // v2: shapes are stored as full corner anchors (TL/TR/BR/BL) instead of
 // 2-point drag diagonals; rotated shapes carry the rotation in those anchors.
 // v1 payloads still load — the commit funnel promotes legacy diagonals.
-export const DRAWINGS_VERSION = 2;
+export const DRAWINGS_VERSION = 3;
 const VALID_IDENTITY = (drawing) => drawing && typeof drawing.id === 'string' && typeof drawing.symbol === 'string'
   && typeof drawing.timeframe === 'string' && DRAWING_TYPES.includes(drawing.drawingType)
   && Array.isArray(drawing.anchorPoints) && drawing.anchorPoints.length > 0;
@@ -24,6 +29,10 @@ function sanitize(envelope) {
   return envelope.drawings.filter((drawing) => VALID_IDENTITY(drawing)).map((drawing) => ({
     ...drawing,
     anchorPoints: drawing.anchorPoints.map((point) => ({ time: point.time, price: point.price })),
+    // Channels need a valid screen-relative regression when re-rendering;
+    // the interaction refits when window anchors change. Keep whatever was
+    // persisted (null for pre-v3 payloads) so v1/v2 files still render.
+    regression: isRegressionType(drawing.drawingType) ? drawing.regression || null : undefined,
   }));
 }
 

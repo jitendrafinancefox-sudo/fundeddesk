@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { MousePointer2, Slash, Minus, Square, Circle, Triangle, RotateCw, Box, Layers, Type, Eye, EyeOff, Trash2, ArrowUpDown, ArrowRight, MoveDiagonal, TrendingUp, Ruler, Check, ArrowRightToLine, ArrowUp, ArrowDown, Info, Magnet, Crosshair } from 'lucide-react';
+import { MousePointer2, Slash, Minus, Square, Circle, Triangle, RotateCw, Box, Layers, Type, Eye, EyeOff, Trash2, ArrowUpDown, ArrowRight, MoveDiagonal, TrendingUp, Ruler, Check, ArrowRightToLine, ArrowUp, ArrowDown, Info, Magnet, Crosshair, PanelRight, AlignCenterVertical } from 'lucide-react';
 
 const GROUPS = [
   { id: 'cursor', label: 'Cursor', icon: MousePointer2, tools: [['cursor', MousePointer2, 'Cursor']] },
@@ -24,6 +24,14 @@ const GROUPS = [
     ['demandZone', Box, 'Demand Zone'],
     ['smcZone', Layers, 'SMC Zone'],
     ['premiumDiscountZone', Layers, 'Premium / Discount'],
+  ] },
+  { id: 'channels', label: 'Channels', icon: PanelRight, tools: [
+    ['parallelChannel', AlignCenterVertical, 'Parallel Channel'],
+    ['flatTopChannel', ArrowRightToLine, 'Flat Top Channel'],
+    ['flatBottomChannel', ArrowRightToLine, 'Flat Bottom Channel'],
+    ['disjointChannel', PanelRight, 'Disjoint Channel'],
+    ['regressionChannel', TrendingUp, 'Regression Channel'],
+    ['linearRegressionChannel', Crosshair, 'Linear Regression Channel'],
   ] },
   { id: 'fib', label: 'Fibonacci', icon: TrendingUp, tools: [['fib', TrendingUp, 'Fib Retracement']] },
   { id: 'measure', label: 'Measure', icon: Ruler, tools: [['measure', Ruler, 'Measure']] },
