@@ -18,20 +18,28 @@ import { setViewport } from '@/stores/viewportStore';
 export class CanvasChartEngine {
   constructor(canvas, chartId) {
     this.canvas = canvas; this.chartId = chartId; this.viewport = new ViewportEngine();
-    this.scene = { candles: [], drawings: [], indicators: [], selectedId: null, crosshair: null, cursor: null, overlays: [] };
+    this.scene = { candles: [], drawings: [], indicators: [], selectedIds: [], crosshair: null, cursor: null, overlays: [], marquee: null, pendingDrawing: null };
     this.pipeline = new RenderPipeline(canvas, this.layers());
   }
   layers() {
     const scene = () => this.renderScene();
     return [
       { layer: 'base', render: (ctx) => { const s = scene(); GridRenderer(s)(ctx); CandleRenderer(s)(ctx); IndicatorRenderer(s)(ctx); AxisRenderer(s)(ctx); TimeAxisRenderer(s)(ctx); } },
-      { layer: 'overlay', render: (ctx) => { const s = scene(); DrawingRenderer(s)(ctx); SelectionRenderer({ drawing: s.drawings.find((d) => d.id === s.selectedId), transform: s.transform })(ctx); CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
+      { layer: 'overlay', render: (ctx) => { const s = scene(); DrawingRenderer({ ...s, selectedIds: s.selectedIds })(ctx); if (s.pendingDrawing) DrawingRenderer({ ...s, drawings: [s.pendingDrawing], selectedId: null })(ctx); SelectionRenderer({ drawings: s.selectedDrawings, transform: s.transform })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
     ];
   }
   renderScene() {
     const transform = createCoordinateTransform(this.viewport, this.scene.candles); const visibleRange = this.viewport.getVisibleRange();
-    return { ...this.scene, viewport: this.viewport, transform, visibleCandles: queryVisibleCandles(this.scene.candles, visibleRange), drawings: queryVisibleDrawings(this.scene.drawings, transform) };
+    let drawings = queryVisibleDrawings(this.scene.drawings, transform);
+    if (this.spatialQuery && this.scene.candles.length) {
+      const fromIndex = Math.max(0, Math.floor(visibleRange.from)); const toIndex = Math.min(this.scene.candles.length - 1, Math.ceil(visibleRange.to));
+      const fromTime = this.scene.candles[fromIndex]?.time; const toTime = this.scene.candles[toIndex]?.time;
+      if (fromTime != null && toTime != null) { const ids = new Set(this.spatialQuery(fromTime, toTime)); drawings = this.scene.drawings.filter((drawing) => ids.has(drawing.id)); }
+    }
+    const selected = new Set(this.scene.selectedIds);
+    return { ...this.scene, viewport: this.viewport, transform, visibleCandles: queryVisibleCandles(this.scene.candles, visibleRange), drawings, selectedDrawings: this.scene.drawings.filter((drawing) => selected.has(drawing.id)) };
   }
+  setSpatialQuery(fn) { this.spatialQuery = fn; }
   resize(width, height, ratio = window.devicePixelRatio || 1) {
     this.viewport.setSize(width, height); this.canvas.width = Math.max(1, Math.floor(width * ratio)); this.canvas.height = Math.max(1, Math.floor(height * ratio)); this.canvas.style.width = `${width}px`; this.canvas.style.height = `${height}px`;
     const ctx = this.canvas.getContext('2d'); ctx?.setTransform(ratio, 0, 0, ratio, 0, 0); this.syncViewport(); this.pipeline.invalidate('full');
@@ -43,8 +51,10 @@ export class CanvasChartEngine {
     else this.scene.candles.push(candle);
     this.viewport.setData(this.scene.candles); this.syncViewport(); this.pipeline.invalidate('full');
   }
-  setDrawings(drawings) { this.scene.drawings = drawings; this.pipeline.invalidate('full'); }
-  setSelected(id) { this.scene.selectedId = id; this.pipeline.invalidate('full'); }
+  setDrawings(drawings, rect = null) { this.scene.drawings = drawings; this.pipeline.invalidate(rect ? 'rect' : 'full', rect); }
+  setSelected(ids) { this.scene.selectedIds = Array.isArray(ids) ? ids : (ids == null ? [] : [ids]); this.pipeline.invalidate('full'); }
+  setMarquee(rect) { this.scene.marquee = rect; this.pipeline.invalidate(rect ? 'rect' : 'full', rect); }
+  setPendingDrawing(drawing, rect = null) { this.scene.pendingDrawing = drawing; this.pipeline.invalidate(rect ? 'rect' : 'full', rect); }
   setIndicators(indicators) { this.scene.indicators = indicators; this.pipeline.invalidate('full'); }
   setCrosshair(point) {
     const previous = this.scene.crosshair;
