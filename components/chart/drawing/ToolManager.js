@@ -25,12 +25,14 @@ export function createToolManager({ getTransform, getCandles, createDrawing }) {
       return this.pendingDrawing();
     },
     // Continue placement: refresh the end anchor and rebuild the draft
-    // drawing so the renderer can preview it live.
+    // drawing so the renderer can preview it live. Keeps the last valid end
+    // when the candle context vanishes mid-gesture.
     update(point) {
       if (!pending) return null;
       const transform = getTransform(); if (!transform) return null;
       const candles = getCandles();
-      pending.end = snapAnchor(anchorFromPoint(transform, point), candles, snap);
+      const end = snapAnchor(anchorFromPoint(transform, point), candles, snap);
+      if (end && Number.isFinite(end.time) && Number.isFinite(end.price)) pending.end = end;
       pending.drawing = createDrawing({
         drawingType: pending.tool,
         anchorPoints: anchorCountFor(pending.tool) === 1 ? [pending.start] : [pending.start, pending.end],
