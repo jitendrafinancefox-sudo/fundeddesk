@@ -13,10 +13,13 @@ export function createToolManager({ getTransform, getCandles, createDrawing }) {
     isActive() { return Boolean(pending); },
     pendingDrawing() { return pending?.drawing || null; },
     // Begin placement: record the start anchor (snapped when magnet is on).
+    // Returns null when no candle context exists yet (empty candles), so the
+    // caller shows no pending preview instead of crashing.
     begin(tool, point) {
       const transform = getTransform(); if (!transform) return null;
       const candles = getCandles();
       const start = snapAnchor(anchorFromPoint(transform, point), candles, snap);
+      if (!start || !Number.isFinite(start.time) || !Number.isFinite(start.price)) return null;
       pending = { tool, start, end: start, drawing: null };
       this.update(point);
       return this.pendingDrawing();
