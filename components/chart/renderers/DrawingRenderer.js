@@ -1,9 +1,10 @@
 'use client';
-import { renderDrawing } from '../drawing/DrawingDefinitions';
+import { renderDrawing, isZoneType } from '../drawing/DrawingDefinitions';
 export function DrawingRenderer({ drawings, transform, selectedId, selectedIds, hoverId }) {
   const selectedSet = selectedIds ? new Set(selectedIds) : null;
   return (ctx) => {
     drawings.forEach((drawing) => {
+      if (isZoneType(drawing.drawingType)) return; // zones render on their own thread
       const points = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
       if (!points.length) return;
       const [a, b = a] = points;

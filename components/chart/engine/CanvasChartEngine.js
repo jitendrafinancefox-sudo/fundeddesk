@@ -6,6 +6,8 @@ import { RenderPipeline } from './RenderPipeline';
 import { GridRenderer } from '../renderers/GridRenderer';
 import { CandleRenderer } from '../renderers/CandleRenderer';
 import { DrawingRenderer } from '../renderers/DrawingRenderer';
+import { ZoneRenderer } from '../renderers/ZoneRenderer';
+import { ZONE_TYPES } from '../drawing/DrawingDefinitions';
 import { IndicatorRenderer } from '../renderers/IndicatorRenderer';
 import { HandleRenderer } from '../renderers/HandleRenderer';
 import { CrosshairRenderer } from '../renderers/CrosshairRenderer';
@@ -25,7 +27,7 @@ export class CanvasChartEngine {
     const scene = () => this.renderScene();
     return [
       { layer: 'base', render: (ctx) => { const s = scene(); GridRenderer(s)(ctx); CandleRenderer(s)(ctx); IndicatorRenderer(s)(ctx); AxisRenderer(s)(ctx); TimeAxisRenderer(s)(ctx); } },
-      { layer: 'overlay', render: (ctx) => { const s = scene(); DrawingRenderer({ ...s, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); if (s.pendingDrawing) DrawingRenderer({ ...s, drawings: [s.pendingDrawing], selectedId: null })(ctx); HandleRenderer({ drawings: s.selectedDrawings, transform: s.transform, hover: s.hover, visible: s.handlesVisible })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
+      { layer: 'overlay', render: (ctx) => { const s = scene(); ZoneRenderer({ ...s, drawings: s.zones, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); DrawingRenderer({ ...s, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); if (s.pendingDrawing) DrawingRenderer({ ...s, drawings: [s.pendingDrawing], selectedId: null })(ctx); HandleRenderer({ drawings: s.selectedDrawings, transform: s.transform, hover: s.hover, visible: s.handlesVisible })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
     ];
   }
   renderScene() {
@@ -43,7 +45,8 @@ export class CanvasChartEngine {
       visibleCandles,
       priceTicks: this.viewport.priceScale.getTicks(),
       timeTicks: this.viewport.timeScale.getTicks(visibleCandles),
-      drawings, selectedDrawings: this.scene.drawings.filter((drawing) => selected.has(drawing.id)),
+      drawings, zones: drawings.filter((drawing) => ZONE_TYPES.includes(drawing.drawingType)),
+      selectedDrawings: this.scene.drawings.filter((drawing) => selected.has(drawing.id)),
       hoverId: this.scene.hover?.id || null,
       handlesVisible: this.scene.tool === 'cursor' && !this.scene.pendingDrawing,
     };

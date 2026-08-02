@@ -18,6 +18,7 @@ import { createHitTestEngine } from './interaction/HitTestEngine';
 import { createHoverManager } from './interaction/HoverManager';
 import { createCursorManager } from './interaction/CursorManager';
 import { createKeyboardShortcutManager } from './interaction/KeyboardShortcutManager';
+import { isShapeType, isZoneType, normalizeShapeAnchors } from './drawing/DrawingDefinitions';
 import ChartContextMenu from './ui/ChartContextMenu';
 import PropertiesPanel from './ui/PropertiesPanel';
 
@@ -61,9 +62,12 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     selectionRef.current = selection; layersRef.current = layers;
 
     // Single mutation funnel: every change flows through here so the registry,
-    // engine, React state and persistence stay in lockstep. A screen-space
-    // rect triggers a partial (dirty-rect) redraw instead of a full frame.
+    // engine, React state and persistence stay in lockstep. Shape diagonals
+    // are promoted to full corner anchors here, covering placement, paste,
+    // undo re-application and serialization loads alike. A screen-space rect
+    // triggers a partial (dirty-rect) redraw instead of a full frame.
     const commit = (next, { rect = null } = {}) => {
+      next = next.map((drawing) => (isShapeType(drawing.drawingType) ? { ...drawing, anchorPoints: normalizeShapeAnchors(drawing) } : drawing));
       drawingsRef.current = next;
       registry.setAll(next);
       selection.prune(registry.ids());
@@ -157,6 +161,11 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     else if (action === 'front' && id) interaction?.zMove(id, 'front');
     else if (action === 'back' && id) interaction?.zMove(id, 'back');
     else if (action === 'clear') interaction?.clearAll();
+    else if (action.startsWith('zone') && id) {
+      const key = action === 'zoneExtendLeft' ? 'extendLeft' : action === 'zoneExtendRight' ? 'extendRight' : action === 'zoneShowLabel' ? 'showLabel' : 'showPrice';
+      const current = menuDrawing?.style?.[key];
+      interaction?.updateStyle(id, { [key]: current === false });
+    }
   };
   const axisDragRef = useRef(null);
   function zoneAt(p) {
@@ -194,7 +203,7 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
       if (toolManagerRef.current?.isActive()) {
         const prev = toolManagerRef.current.pendingDrawing();
         const next = toolManagerRef.current.update(p);
-        const rect = prev && next ? layersRef.current?.dirtyRect(prev, next, engine.transform()) : null;
+        const rect = prev && next && !isZoneType(prev.drawingType) ? layersRef.current?.dirtyRect(prev, next, engine.transform()) : null;
         engine.setPendingDrawing(next, rect || null);
         hoverManagerRef.current?.clear();
         applyCursor();
@@ -239,7 +248,7 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     onWheel={(event) => { event.preventDefault(); interactionRef.current?.zoom(event.deltaY, point(event).x); }}
     style={{ display: 'block', width: '100%', height, touchAction: 'none' }}
   />
-    {contextMenu && <ChartContextMenu x={contextMenu.x} y={contextMenu.y} id={contextMenu.id} locked={menuDrawing?.locked} hidden={menuDrawing?.hidden} hasClipboard={Boolean(drawingInteractionRef.current?.clipboard?.length)} bounds={contextMenu.bounds} onAction={runMenuAction} onClose={() => setContextMenu(null)} />}
+    {contextMenu && <ChartContextMenu x={contextMenu.x} y={contextMenu.y} id={contextMenu.id} locked={menuDrawing?.locked} hidden={menuDrawing?.hidden} zone={menuDrawing && isZoneType(menuDrawing.drawingType) ? { extendLeft: menuDrawing.style?.extendLeft !== false, extendRight: menuDrawing.style?.extendRight !== false, showLabel: menuDrawing.style?.showLabel !== false, showPrice: menuDrawing.style?.showPrice !== false } : null} hasClipboard={Boolean(drawingInteractionRef.current?.clipboard?.length)} bounds={contextMenu.bounds} onAction={runMenuAction} onClose={() => setContextMenu(null)} />}
     {propertiesDrawing && <PropertiesPanel drawing={propertiesDrawing} onStyle={(patch) => drawingInteractionRef.current?.updateStyle(propertiesDrawing.id, patch)} onLockToggle={(locked) => (locked ? drawingInteractionRef.current?.lock([propertiesDrawing.id]) : drawingInteractionRef.current?.unlock([propertiesDrawing.id]))} onClose={() => setProperties(null)} />}
   </div>;
 }

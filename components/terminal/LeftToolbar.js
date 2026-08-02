@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { MousePointer2, Slash, Minus, Square, Circle, Type, Eye, EyeOff, Trash2, ArrowUpDown, ArrowRight, MoveDiagonal, TrendingUp, Ruler, Check, ArrowRightToLine, ArrowUp, ArrowDown, Info, Magnet, Crosshair } from 'lucide-react';
+import { MousePointer2, Slash, Minus, Square, Circle, Triangle, RotateCw, Box, Layers, Type, Eye, EyeOff, Trash2, ArrowUpDown, ArrowRight, MoveDiagonal, TrendingUp, Ruler, Check, ArrowRightToLine, ArrowUp, ArrowDown, Info, Magnet, Crosshair } from 'lucide-react';
 
 const GROUPS = [
   { id: 'cursor', label: 'Cursor', icon: MousePointer2, tools: [['cursor', MousePointer2, 'Cursor']] },
@@ -14,7 +14,16 @@ const GROUPS = [
   ] },
   { id: 'shapes', label: 'Shapes', icon: Square, tools: [
     ['rect', Square, 'Rectangle'],
+    ['rotatedRect', RotateCw, 'Rotated Rectangle'],
+    ['circle', Circle, 'Circle'],
     ['ellipse', Circle, 'Ellipse'],
+    ['triangle', Triangle, 'Triangle'],
+  ] },
+  { id: 'zones', label: 'Zones', icon: Layers, tools: [
+    ['supplyZone', Box, 'Supply Zone'],
+    ['demandZone', Box, 'Demand Zone'],
+    ['smcZone', Layers, 'SMC Zone'],
+    ['premiumDiscountZone', Layers, 'Premium / Discount'],
   ] },
   { id: 'fib', label: 'Fibonacci', icon: TrendingUp, tools: [['fib', TrendingUp, 'Fib Retracement']] },
   { id: 'measure', label: 'Measure', icon: Ruler, tools: [['measure', Ruler, 'Measure']] },

@@ -2,7 +2,10 @@
 import { drawingPersistence } from '@/services/drawingPersistence';
 import { DRAWING_TYPES } from '../engine/DrawingSchema';
 
-export const DRAWINGS_VERSION = 1;
+// v2: shapes are stored as full corner anchors (TL/TR/BR/BL) instead of
+// 2-point drag diagonals; rotated shapes carry the rotation in those anchors.
+// v1 payloads still load — the commit funnel promotes legacy diagonals.
+export const DRAWINGS_VERSION = 2;
 const VALID_IDENTITY = (drawing) => drawing && typeof drawing.id === 'string' && typeof drawing.symbol === 'string'
   && typeof drawing.timeframe === 'string' && DRAWING_TYPES.includes(drawing.drawingType)
   && Array.isArray(drawing.anchorPoints) && drawing.anchorPoints.length > 0;

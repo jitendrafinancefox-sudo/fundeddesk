@@ -1,6 +1,8 @@
 'use client';
 import { unionRect } from '../drawing/GeometryEngine';
 import { snapAnchor } from './SnappingEngine';
+import { isShapeType, isZoneType, normalizeShapeAnchors } from '../drawing/DrawingDefinitions';
+import { polygonCorners, polygonEdges, polygonCenter, resizeEdge } from '../drawing/ShapeGeometry';
 
 const clone = (value) => structuredClone(value);
 
@@ -29,8 +31,9 @@ export class DrawingInteraction {
 
   // Topmost drawing under the pointer: handles (rotation > midpoint >
   // anchor) win over line bodies. Locked/hidden drawings are excluded by
-  // the hit-test engine.
-  hit(point) { return this.hitTestEngine?.hit(point) || null; }
+  // the hit-test engine. Extended zones are swept separately (their band
+  // reaches beyond the time-bounded candidate window).
+  hit(point) { return this.hitTestEngine?.hit(point) || this.hitTestEngine?.hitZone(point) || null; }
   // Same hit, but locked objects are allowed (context menu / properties
   // must be able to target a locked drawing so it can be unlocked).
   hitLoose(point) { return this.hitTestEngine?.hit(point, { ignoreLock: true }) || null; }
@@ -80,11 +83,18 @@ export class DrawingInteraction {
     const snapActive = !mods.ctrl;
     if (mode.kind === 'group') { this.moveGroup(point, transform, mode, mods, snapActive); return; }
     const next = clone(mode.original);
-    if (mode.kind === 'anchor') { this.moveAnchor(point, transform, mode, next, mods, snapActive); }
+    if (mode.kind === 'anchor') {
+      if (isShapeType(mode.original.drawingType)) this.shapeCorner(point, transform, mode, next, snapActive);
+      else this.moveAnchor(point, transform, mode, next, mods, snapActive);
+    }
+    else if (mode.kind === 'edge') { this.shapeEdge(point, transform, mode, next, snapActive); }
     else if (mode.kind === 'midpoint') { this.scaleMidpoint(point, transform, mode, next, snapActive); }
     else if (mode.kind === 'rotation') { this.rotate(point, transform, mode, next); }
     else { this.moveBody(point, transform, mode, next, snapActive); }
-    const rect = this.layers.dirtyRect(mode.original, next, transform);
+    // Zones paint full-width bands, so a partial repaint can never clear the
+    // previous frame's band edges — dirty-rect edits must fall back to a
+    // full invalidate for them.
+    const rect = isZoneType(mode.original.drawingType) ? null : this.layers.dirtyRect(mode.original, next, transform);
     this.commit(this.replaceIn(this.getDrawings(), next), { rect });
   }
 
@@ -111,6 +121,34 @@ export class DrawingInteraction {
     next.anchorPoints = next.anchorPoints.map((anchor) => ({ time: anchor.time + dt, price: anchor.price + dp }));
   }
 
+  // Shape corner drag: shape anchors ARE the corners (TL, TR, BR, BL for
+  // boxes; three points for triangles), so this is a straight anchor move
+  // with snapping — the rotated frame is implicit in the corner positions.
+  shapeCorner(point, transform, mode, next, snapActive) {
+    let anchor = transform.pixelToAnchor(point.x, point.y);
+    if (snapActive && this.snap.magnet) anchor = snapAnchor(anchor, this.getCandles(), this.snap);
+    next.anchorPoints[mode.anchorIndex] = anchor;
+  }
+
+  // Mid-edge drag: translate the edge's two corners along the edge's
+  // outward normal (one axis of the shape), leaving the opposite edge and
+  // the rest of the shape untouched. Works in rotated frames because the
+  // normal is computed from the current corner positions.
+  shapeEdge(point, transform, mode, next, snapActive) {
+    const points = next.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
+    if (points.length < 3) return;
+    const corners = polygonCorners(points);
+    const edges = polygonEdges(corners);
+    const edgeIndex = mode.edge?.index ?? mode.anchorIndex;
+    const edge = edges[edgeIndex]; if (!edge) return;
+    const moved = resizeEdge(corners, edgeIndex, point, edges);
+    next.anchorPoints = moved.map((p, i) => {
+      let result = transform.pixelToAnchor(p.x, p.y);
+      if (snapActive && this.snap.magnet) result = snapAnchor(result, this.getCandles(), this.snap);
+      return result;
+    });
+  }
+
   // Midpoint drag = resize: the midpoint follows the cursor and both anchors
   // scale symmetrically about the original midpoint.
   scaleMidpoint(point, transform, mode, next, snapActive) {
@@ -129,20 +167,22 @@ export class DrawingInteraction {
   }
 
   // Rotation handle drag: rotate every anchor in screen space around the
-  // drawing's midpoint, then convert back to market coordinates. Angle
-  // snapping to 15° steps while Shift is held.
+  // drawing's pivot — the polygon center for shapes, the midpoint for
+  // lines — then convert back to market coordinates. Angle snapping to 15°
+  // steps while Shift is held.
   rotate(point, transform, mode, next) {
     const points = next.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
     if (points.length < 2) return;
-    const mid = midpointOf(points[0], points[1]);
-    let delta = Math.atan2(point.y - mid.y, point.x - mid.x) - Math.atan2(mode.startCursor.y - mid.y, mode.startCursor.x - mid.x);
+    const isShape = isShapeType(next.drawingType);
+    const pivot = isShape && points.length >= 3 ? polygonCenter(points) : midpointOf(points[0], points[1]);
+    let delta = Math.atan2(point.y - pivot.y, point.x - pivot.x) - Math.atan2(mode.startCursor.y - pivot.y, mode.startCursor.x - pivot.x);
     const mods = this.getMods() || {};
     if (mods.shift) delta = Math.round(delta / (Math.PI / 12)) * (Math.PI / 12);
     const cos = Math.cos(delta); const sin = Math.sin(delta);
     next.anchorPoints = next.anchorPoints.map((anchor, index) => {
       const p = transform.anchorToPixel(anchor); if (!p) return anchor;
-      const dx = p.x - mid.x; const dy = p.y - mid.y;
-      return transform.pixelToAnchor(mid.x + dx * cos - dy * sin, mid.y + dx * sin + dy * cos);
+      const dx = p.x - pivot.x; const dy = p.y - pivot.y;
+      return transform.pixelToAnchor(pivot.x + dx * cos - dy * sin, pivot.y + dx * sin + dy * cos);
     });
   }
 
@@ -226,8 +266,10 @@ export class DrawingInteraction {
     return best || anchor;
   }
 
-  // Placement from a tool: record as a history command and select the result.
+  // Placement from a tool: promote shape diagonals to full corner anchors,
+  // record as a history command and select the result.
   place(drawing) {
+    if (isShapeType(drawing.drawingType)) drawing = { ...drawing, anchorPoints: normalizeShapeAnchors(drawing) };
     this.history.execute({
       label: 'Add drawing',
       apply: () => this.commit([...this.getDrawings(), drawing]),
@@ -349,6 +391,7 @@ export class DrawingInteraction {
     return list.map((item) => byId.get(item.id) || item);
   }
   groupDirty(originals, nexts, transform) {
+    if (originals.some((item) => isZoneType(item.drawingType))) return null;
     let rect = null;
     for (let i = 0; i < originals.length; i += 1) {
       const part = this.layers.dirtyRect(originals[i], nexts[i], transform);

@@ -5,12 +5,29 @@
 // (segment between anchors) is the default for every type; specific tools
 // override render/hitTest as needed. Renderers receive the raw anchor pixels
 // so they stay viewport-agnostic.
+//
+// Shape tools (`shape: true`) are stored as corner anchors in data
+// coordinates (4 for box shapes, 3 for triangle) and rendered as polygons,
+// so rotation is baked into the anchors and every edit is a screen-space
+// transform converted back through pixelToAnchor.
+
+import {
+  polygonCorners, polygonBounds, polygonCenter, pointInPolygon, distanceToPolygon,
+} from './ShapeGeometry';
 
 const FIB_RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 const fmtRatio = (ratio) => ratio.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
 const fmtPrice = (price) => price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const segment = (ctx, a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+const shapePoints = (drawing, transform) => drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
+const polygon = (ctx, points, close = true) => { ctx.beginPath(); points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); if (close) ctx.closePath(); };
+
+export const ZONE_TYPES = ['supplyZone', 'demandZone', 'smcZone', 'premiumDiscountZone'];
+export const isZoneType = (drawingType) => ZONE_TYPES.includes(drawingType);
+export const zoneColorFor = (drawingType) => ({
+  supplyZone: '#ef4444', demandZone: '#22c55e', smcZone: '#4d7cfe', premiumDiscountZone: '#eab308',
+}[drawingType] || '#4d7cfe');
 
 export const DRAWING_DEFINITIONS = {
   trend: { label: 'Trend Line', anchorCount: 2, render: segment },
@@ -51,32 +68,78 @@ export const DRAWING_DEFINITIONS = {
   },
   rect: {
     label: 'Rectangle',
-    anchorCount: 2,
-    render: (ctx, a, b) => ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y),
+    anchorCount: 2, shape: true, cornerCount: 4, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => { polygon(ctx, polygonCorners(shapePoints(drawing, transform))); ctx.stroke(); },
+    hitTest: (drawing, point, transform, threshold) => { const pts = polygonCorners(shapePoints(drawing, transform)); return Boolean(pts.length >= 3) && (pointInPolygon(point, pts) || distanceToPolygon(point, pts) <= threshold); },
+  },
+  rotatedRect: {
+    label: 'Rotated Rectangle',
+    anchorCount: 2, shape: true, cornerCount: 4, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => { polygon(ctx, polygonCorners(shapePoints(drawing, transform))); ctx.stroke(); },
+    hitTest: (drawing, point, transform, threshold) => { const pts = polygonCorners(shapePoints(drawing, transform)); return Boolean(pts.length >= 3) && (pointInPolygon(point, pts) || distanceToPolygon(point, pts) <= threshold); },
+  },
+  circle: {
+    label: 'Circle',
+    anchorCount: 2, shape: true, cornerCount: 4, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => {
+      const pts = polygonCorners(shapePoints(drawing, transform));
+      const box = polygonBounds(pts);
+      const side = Math.max(box.width, box.height);
+      const cx = box.x + box.width / 2; const cy = box.y + box.height / 2;
+      ctx.beginPath(); ctx.ellipse(cx, cy, side / 2, side / 2, 0, 0, Math.PI * 2); ctx.stroke();
+    },
     hitTest: (drawing, point, transform, threshold) => {
-      const points = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
-      if (points.length < 2) return false;
-      const xs = [points[0].x, points[1].x].sort((p, q) => p - q);
-      const ys = [points[0].y, points[1].y].sort((p, q) => p - q);
-      return point.x >= xs[0] - threshold && point.x <= xs[1] + threshold && point.y >= ys[0] - threshold && point.y <= ys[1] + threshold;
+      const pts = polygonCorners(shapePoints(drawing, transform));
+      const box = polygonBounds(pts);
+      const side = Math.max(box.width, box.height);
+      const cx = box.x + box.width / 2; const cy = box.y + box.height / 2;
+      const dx = (point.x - cx) / (side / 2 + threshold); const dy = (point.y - cy) / (side / 2 + threshold);
+      return dx * dx + dy * dy <= 1;
     },
   },
   ellipse: {
     label: 'Ellipse',
-    anchorCount: 2,
-    render: (ctx, a, b) => {
-      const ex = Math.min(a.x, b.x); const ey = Math.min(a.y, b.y);
-      const ew = Math.abs(b.x - a.x); const eh = Math.abs(b.y - a.y);
-      ctx.beginPath(); ctx.ellipse(ex + ew / 2, ey + eh / 2, ew / 2, eh / 2, 0, 0, Math.PI * 2); ctx.stroke();
+    anchorCount: 2, shape: true, cornerCount: 4, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => {
+      const box = polygonBounds(polygonCorners(shapePoints(drawing, transform)));
+      ctx.beginPath(); ctx.ellipse(box.x + box.width / 2, box.y + box.height / 2, box.width / 2, box.height / 2, 0, 0, Math.PI * 2); ctx.stroke();
     },
     hitTest: (drawing, point, transform, threshold) => {
-      const points = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
-      if (points.length < 2) return false;
-      const a = points[0]; const b = points[1];
-      const dx = (point.x - (a.x + b.x) / 2) / (Math.abs(b.x - a.x) / 2 + threshold);
-      const dy = (point.y - (a.y + b.y) / 2) / (Math.abs(b.y - a.y) / 2 + threshold);
+      const box = polygonBounds(polygonCorners(shapePoints(drawing, transform)));
+      const rx = box.width / 2 + threshold; const ry = box.height / 2 + threshold;
+      const dx = (point.x - (box.x + box.width / 2)) / rx; const dy = (point.y - (box.y + box.height / 2)) / ry;
       return dx * dx + dy * dy <= 1;
     },
+  },
+  triangle: {
+    label: 'Triangle',
+    anchorCount: 2, shape: true, cornerCount: 3, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => { polygon(ctx, polygonCorners(shapePoints(drawing, transform))); ctx.stroke(); },
+    hitTest: (drawing, point, transform, threshold) => { const pts = polygonCorners(shapePoints(drawing, transform)); return Boolean(pts.length >= 3) && (pointInPolygon(point, pts) || distanceToPolygon(point, pts) <= threshold); },
+  },
+  supplyZone: {
+    label: 'Supply Zone',
+    anchorCount: 2, shape: true, cornerCount: 4, zone: true,
+    render: (ctx, a, b, drawing, transform) => { renderZone(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => zoneHit(drawing, point, transform, threshold),
+  },
+  demandZone: {
+    label: 'Demand Zone',
+    anchorCount: 2, shape: true, cornerCount: 4, zone: true,
+    render: (ctx, a, b, drawing, transform) => { renderZone(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => zoneHit(drawing, point, transform, threshold),
+  },
+  smcZone: {
+    label: 'SMC Zone',
+    anchorCount: 2, shape: true, cornerCount: 4, zone: true,
+    render: (ctx, a, b, drawing, transform) => { renderZone(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => zoneHit(drawing, point, transform, threshold),
+  },
+  premiumDiscountZone: {
+    label: 'Premium / Discount',
+    anchorCount: 2, shape: true, cornerCount: 4, zone: true,
+    render: (ctx, a, b, drawing, transform) => { renderZone(ctx, drawing, transform); },
+    hitTest: (drawing, point, transform, threshold) => zoneHit(drawing, point, transform, threshold),
   },
   ray: {
     label: 'Ray',
@@ -172,6 +235,66 @@ export const DRAWING_DEFINITIONS = {
   pitchfork: { label: 'Pitchfork', anchorCount: 2 },
 };
 
+// Zone band rendering: translucent fill + top/bottom borders + labels.
+// Extend flags stretch the band to the canvas edges (default on).
+function renderZone(ctx, drawing, transform) {
+  const pts = polygonCorners(shapePoints(drawing, transform));
+  if (pts.length < 2) return;
+  const box = polygonBounds(pts);
+  const color = drawing.style?.color || zoneColorFor(drawing.drawingType);
+  const opacity = drawing.style?.opacity ?? 0.22;
+  const extendLeft = drawing.style?.extendLeft !== false;
+  const extendRight = drawing.style?.extendRight !== false;
+  const left = extendLeft ? 0 : box.x;
+  const right = extendRight ? ctx.canvas.width : box.x + box.width;
+  const top = box.y; const bottom = box.y + box.height;
+  ctx.fillStyle = color;
+  ctx.globalAlpha = opacity;
+  ctx.fillRect(left, top, right - left, bottom - top);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = drawing.style?.lineWidth || 1.5;
+  ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(right, top); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(left, bottom); ctx.lineTo(right, bottom); ctx.stroke();
+  if (drawing.style?.showLabel !== false) {
+    ctx.font = '600 10px Inter, sans-serif';
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const name = drawingLabelFor(drawing.drawingType);
+    ctx.fillText(name, left + 6, top + 9);
+  }
+  if (drawing.style?.showPrice !== false) {
+    ctx.font = '10px Inter, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    const topPrice = drawing.anchorPoints[0]?.price ?? 0;
+    const bottomPrice = drawing.anchorPoints[1]?.price ?? topPrice;
+    const hi = Math.max(topPrice, bottomPrice); const lo = Math.min(topPrice, bottomPrice);
+    ctx.fillStyle = color;
+    ctx.fillText(fmtPrice(hi), left + 6, top - 4);
+    ctx.fillText(fmtPrice(lo), left + 6, bottom + 11);
+  }
+  if (drawing.style?.showTime !== false && !extendLeft && !extendRight) {
+    const t1 = drawing.anchorPoints[0]?.time ?? 0;
+    const t2 = drawing.anchorPoints[1]?.time ?? t1;
+    ctx.font = '10px Inter, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+    const label = `${new Date(Math.min(t1, t2) * 1000).toLocaleDateString('en-IN')} – ${new Date(Math.max(t1, t2) * 1000).toLocaleDateString('en-IN')}`;
+    ctx.fillStyle = 'rgba(12,18,28,.85)';
+    const width = ctx.measureText(label).width;
+    ctx.fillRect(right - width - 12, bottom + 2, width + 10, 16);
+    ctx.fillStyle = color;
+    ctx.fillText(label, right - 7, bottom + 13);
+  }
+}
+
+function zoneHit(drawing, point, transform, threshold) {
+  const pts = polygonCorners(shapePoints(drawing, transform));
+  if (pts.length < 2) return false;
+  const box = polygonBounds(pts);
+  const extendLeft = drawing.style?.extendLeft !== false;
+  const extendRight = drawing.style?.extendRight !== false;
+  const insideX = extendLeft && extendRight ? true : (extendLeft ? point.x >= -threshold : extendRight ? point.x <= box.x + box.width + threshold : point.x >= box.x - threshold && point.x <= box.x + box.width + threshold);
+  return insideX && point.y >= box.y - threshold && point.y <= box.y + box.height + threshold;
+}
+
 const clamp01 = (value) => Math.max(0, Math.min(1, value));
 
 function distanceToSegment(point, a, b) {
@@ -183,6 +306,7 @@ function distanceToSegment(point, a, b) {
 
 export const anchorCountFor = (drawingType) => DRAWING_DEFINITIONS[drawingType]?.anchorCount ?? 2;
 export const drawingLabelFor = (drawingType) => DRAWING_DEFINITIONS[drawingType]?.label || drawingType;
+export const isShapeType = (drawingType) => Boolean(DRAWING_DEFINITIONS[drawingType]?.shape);
 // Convention: every per-tool render receives (ctx, a, b, drawing, transform)
 // where a/b are the first two anchor points projected to screen pixels.
 export const renderDrawing = (ctx, drawing, a, b, transform) => DRAWING_DEFINITIONS[drawing.drawingType]?.render?.(ctx, a, b, drawing, transform) ?? segment(ctx, a, b);
@@ -194,3 +318,17 @@ export const hitTestDrawing = (drawing, point, transform, threshold = 7) => {
   const [a, b = a] = points;
   return distanceToSegment(point, a, b) <= threshold;
 };
+
+// Promote a 2-anchor drag diagonal to full corner anchors (data space), so
+// every shape is edited as its real corners. Idempotent for already-normalized
+// drawings.
+export function normalizeShapeAnchors(drawing) {
+  const def = DRAWING_DEFINITIONS[drawing.drawingType];
+  if (!def?.shape) return drawing.anchorPoints;
+  if (drawing.anchorPoints.length === (def.cornerCount || 4)) return drawing.anchorPoints;
+  const [a, b] = drawing.anchorPoints;
+  const t1 = Math.min(a.time, b.time); const t2 = Math.max(a.time, b.time);
+  const p1 = Math.max(a.price, b.price); const p2 = Math.min(a.price, b.price);
+  if (def.cornerCount === 3) return [{ time: t1, price: p1 }, { time: t2, price: p1 }, { time: (t1 + t2) / 2, price: p2 }];
+  return [{ time: t1, price: p1 }, { time: t2, price: p1 }, { time: t2, price: p2 }, { time: t1, price: p2 }];
+}
