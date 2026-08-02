@@ -13,7 +13,8 @@
 // line, a center move handle, a midpoint (base line) and a rotation handle.
 import { polygonCorners, polygonCenter, polygonEdges, polygonRotation, rotatePoint } from '../drawing/ShapeGeometry';
 import { channelGeometry, projectPointOnLine, lineNormal } from '../drawing/ChannelGeometry';
-import { DRAWING_DEFINITIONS } from '../drawing/DrawingDefinitions';
+import { fibHandleGeometry } from '../drawing/FibHitTester';
+import { DRAWING_DEFINITIONS, isFibType } from '../drawing/DrawingDefinitions';
 
 const ROTATABLE_TOOLS = new Set(['trend', 'ray', 'extended', 'measure', 'arrow']);
 const midpointOf = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
@@ -37,6 +38,19 @@ export function handleGeometry(drawing, transform) {
     };
   }
   const geometry = { anchors, midpoint: null, rotation: null, rotatable: false, channel: false };
+  if (isFibType(drawing.drawingType)) {
+    const fib = fibHandleGeometry(drawing, transform);
+    geometry.channel = true;
+    geometry.anchors = fib.anchors;
+    geometry.midpoint = fib.midpoint;
+    if (fib.widthHandle) geometry.widthHandle = fib.widthHandle;
+    if (fib.center) geometry.center = fib.center;
+    if (fib.rotation) {
+      geometry.rotation = fib.rotation;
+      geometry.rotatable = true;
+    }
+    return geometry;
+  }
   if (def?.channel) {
     geometry.channel = true;
     const geo = channelGeometry(drawing, transform);

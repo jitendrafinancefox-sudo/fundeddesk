@@ -1,7 +1,7 @@
 'use client';
 import { drawingHit } from '../drawing/GeometryEngine';
 import { nearestHandle } from './HandleGeometry';
-import { isZoneType, isChannelType, hitTestDrawing } from '../drawing/DrawingDefinitions';
+import { isZoneType, isChannelType, isFibType, hitTestDrawing } from '../drawing/DrawingDefinitions';
 
 // Priority-ordered hit testing shared by hover, selection and editing.
 // Handles (rotation > midpoint > anchor) beat line bodies, and drawings are
@@ -53,7 +53,7 @@ export function createHitTestEngine({ registry, getTransform, layers }) {
     const ids = registry.ids();
     for (let i = ids.length - 1; i >= 0; i -= 1) {
       const drawing = registry.get(ids[i]);
-      if (!drawing || !(isZoneType(drawing.drawingType) || isChannelType(drawing.drawingType)) || isExcluded(drawing, ignoreLock)) continue;
+      if (!drawing || !(isZoneType(drawing.drawingType) || isChannelType(drawing.drawingType) || isFibType(drawing.drawingType)) || isExcluded(drawing, ignoreLock)) continue;
       if (hitTestDrawing(drawing, point, transform, 7)) {
         return { id: drawing.id, anchorIndex: -1, kind: 'body', drawingType: drawing.drawingType, screenPoints: project(drawing), edge: null, shape: false };
       }

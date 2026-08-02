@@ -8,7 +8,8 @@ import { CandleRenderer } from '../renderers/CandleRenderer';
 import { DrawingRenderer } from '../renderers/DrawingRenderer';
 import { ZoneRenderer } from '../renderers/ZoneRenderer';
 import { ChannelRenderer } from '../renderers/ChannelRenderer';
-import { ZONE_TYPES, isChannelType } from '../drawing/DrawingDefinitions';
+import { FibRenderer } from '../renderers/FibRenderer';
+import { ZONE_TYPES, isChannelType, isFibType } from '../drawing/DrawingDefinitions';
 import { IndicatorRenderer } from '../renderers/IndicatorRenderer';
 import { HandleRenderer } from '../renderers/HandleRenderer';
 import { CrosshairRenderer } from '../renderers/CrosshairRenderer';
@@ -28,7 +29,7 @@ export class CanvasChartEngine {
     const scene = () => this.renderScene();
     return [
       { layer: 'base', render: (ctx) => { const s = scene(); GridRenderer(s)(ctx); CandleRenderer(s)(ctx); IndicatorRenderer(s)(ctx); AxisRenderer(s)(ctx); TimeAxisRenderer(s)(ctx); } },
-      { layer: 'overlay', render: (ctx) => { const s = scene(); const pending = s.pendingDrawing; ZoneRenderer({ ...s, drawings: s.zones, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); ChannelRenderer({ ...s, drawings: pending && isChannelType(pending.drawingType) ? [...s.channels, pending] : s.channels })(ctx); DrawingRenderer({ ...s, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); if (pending && !isChannelType(pending.drawingType)) DrawingRenderer({ ...s, drawings: [pending], selectedId: null })(ctx); HandleRenderer({ drawings: s.selectedDrawings, transform: s.transform, hover: s.hover, visible: s.handlesVisible })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
+      { layer: 'overlay', render: (ctx) => { const s = scene(); const pending = s.pendingDrawing; ZoneRenderer({ ...s, drawings: s.zones, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); ChannelRenderer({ ...s, drawings: pending && isChannelType(pending.drawingType) ? [...s.channels, pending] : s.channels })(ctx); FibRenderer({ ...s, drawings: pending && isFibType(pending.drawingType) ? [...s.fibDrawings, pending] : s.fibDrawings })(ctx); DrawingRenderer({ ...s, selectedIds: s.selectedIds, hoverId: s.hoverId })(ctx); if (pending && !isChannelType(pending.drawingType) && !isFibType(pending.drawingType)) DrawingRenderer({ ...s, drawings: [pending], selectedId: null })(ctx); HandleRenderer({ drawings: s.selectedDrawings, transform: s.transform, hover: s.hover, visible: s.handlesVisible })(ctx); if (s.marquee) { ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(77,124,254,.9)'; ctx.lineWidth = 1; ctx.strokeRect(s.marquee.x, s.marquee.y, s.marquee.width, s.marquee.height); ctx.restore(); } CrosshairRenderer(s)(ctx); CursorRenderer(s)(ctx); OverlayRenderer(s)(ctx); } },
     ];
   }
   renderScene() {
@@ -48,6 +49,7 @@ export class CanvasChartEngine {
       timeTicks: this.viewport.timeScale.getTicks(visibleCandles),
       drawings, zones: drawings.filter((drawing) => ZONE_TYPES.includes(drawing.drawingType)),
       channels: drawings.filter((drawing) => isChannelType(drawing.drawingType)),
+      fibDrawings: drawings.filter((drawing) => isFibType(drawing.drawingType)),
       selectedDrawings: this.scene.drawings.filter((drawing) => selected.has(drawing.id)),
       hoverId: this.scene.hover?.id || null,
       handlesVisible: this.scene.tool === 'cursor' && !this.scene.pendingDrawing,

@@ -1,9 +1,10 @@
 'use client';
 import { unionRect } from '../drawing/GeometryEngine';
 import { snapAnchor } from './SnappingEngine';
-import { isShapeType, isZoneType, isChannelType, normalizeShapeAnchors } from '../drawing/DrawingDefinitions';
+import { isShapeType, isZoneType, isChannelType, isFibType, normalizeShapeAnchors } from '../drawing/DrawingDefinitions';
 import { polygonCorners, polygonEdges, polygonCenter, resizeEdge } from '../drawing/ShapeGeometry';
 import { channelGeometry, isRegressionType, fitLinearRegression } from '../drawing/ChannelGeometry';
+import { fibGeometry } from '../drawing/FibBase';
 
 const clone = (value) => structuredClone(value);
 
@@ -84,7 +85,7 @@ export class DrawingInteraction {
     const snapActive = !mods.ctrl;
     if (mode.kind === 'group') { this.moveGroup(point, transform, mode, mods, snapActive); return; }
     const next = clone(mode.original);
-    const isChannel = isChannelType(mode.original.drawingType);
+    const isChannel = isChannelType(mode.original.drawingType) || isFibType(mode.original.drawingType);
     if (mode.kind === 'anchor') {
       if (isShapeType(mode.original.drawingType) || isChannel) this.shapeCorner(point, transform, mode, next, snapActive);
       else this.moveAnchor(point, transform, mode, next, mods, snapActive);
@@ -146,7 +147,7 @@ export class DrawingInteraction {
   // dragging parallel to the base does nothing while the two lines stay
   // perfectly parallel at any distance.
   widthDrag(point, transform, mode, next, snapActive) {
-    const geo = channelGeometry(next, transform);
+    const geo = isChannelType(next.drawingType) ? channelGeometry(next, transform) : isFibType(next.drawingType) ? fibGeometry(next, transform) : null;
     if (!geo?.baseA || !geo.baseB || !geo.n) return;
     const baseMid = { x: (geo.baseA.x + geo.baseB.x) / 2, y: (geo.baseA.y + geo.baseB.y) / 2 };
     const distance = (point.x - baseMid.x) * geo.n.nx + (point.y - baseMid.y) * geo.n.ny;
@@ -202,6 +203,7 @@ export class DrawingInteraction {
     let pivot = null;
     if (isShapeType(next.drawingType)) pivot = points.length >= 3 ? polygonCenter(points) : midpointOf(points[0], points[1]);
     else if (isChannelType(next.drawingType)) pivot = channelGeometry(next, transform)?.center || midpointOf(points[0], points[1]);
+    else if (isFibType(next.drawingType)) pivot = fibGeometry(next, transform)?.center || midpointOf(points[0], points[1]);
     else pivot = midpointOf(points[0], points[1]);
     let delta = Math.atan2(point.y - pivot.y, point.x - pivot.x) - Math.atan2(mode.startCursor.y - pivot.y, mode.startCursor.x - pivot.x);
     const mods = this.getMods() || {};
@@ -393,6 +395,18 @@ export class DrawingInteraction {
     const next = { ...drawing, style: { ...(drawing.style || {}), ...patch } };
     this.history.execute({
       label: 'Style change',
+      apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+      revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+    });
+  }
+
+  // Fibonacci payload patch (properties panel): level sets, label options.
+  // Merged into drawing.fib as one undoable delta command.
+  updateFib(id, patch) {
+    const drawing = this.registry.get(id); if (!drawing) return;
+    const next = { ...drawing, fib: { ...(drawing.fib || {}), ...patch } };
+    this.history.execute({
+      label: 'Fibonacci settings',
       apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
       revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
     });

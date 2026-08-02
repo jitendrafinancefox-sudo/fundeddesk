@@ -15,10 +15,12 @@ import {
   polygonCorners, polygonBounds, polygonCenter, pointInPolygon, distanceToPolygon,
 } from './ShapeGeometry';
 import { channelGeometry, channelHitTest, extendLine, extendFlat } from './ChannelGeometry';
+import { isFibType } from './FibGeometry';
+import { renderFib } from './FibRenderer';
+import { fibHitTest } from './FibHitTester';
 export { isChannelType } from './ChannelGeometry';
+export { isFibType };
 
-const FIB_RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
-const fmtRatio = (ratio) => ratio.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
 const fmtPrice = (price) => price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const segment = (ctx, a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
@@ -251,23 +253,13 @@ export const DRAWING_DEFINITIONS = {
       ctx.fillText(text, mx, my);
     },
   },
-  fib: {
-    label: 'Fib Retracement',
-    anchorCount: 2,
-    render: (ctx, a, b, drawing, transform) => {
-      const p1 = drawing.anchorPoints[0]?.price ?? 0;
-      const p2 = drawing.anchorPoints[1]?.price ?? p1;
-      const x1 = Math.min(a.x, b.x); const x2 = Math.max(a.x, b.x);
-      ctx.font = '10px Inter, sans-serif'; ctx.textBaseline = 'middle';
-      FIB_RATIOS.forEach((ratio, index) => {
-        const price = p1 + (p2 - p1) * ratio;
-        const y = transform.priceToPixel(price);
-        ctx.globalAlpha = 0.5 + 0.5 * (index / (FIB_RATIOS.length - 1));
-        ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
-        ctx.fillText(`${fmtRatio(ratio)}  ${fmtPrice(price)}`, x2 + 4, y - 1);
-      });
-    },
-  },
+  fib: { label: 'Fib Retracement', anchorCount: 2, fib: true, rotatable: false, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
+  fibExtension: { label: 'Fib Extension', anchorCount: 2, fib: true, rotatable: false, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
+  fibProjection: { label: 'Fib Projection', anchorCount: 3, fib: true, rotatable: false, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
+  fibFan: { label: 'Fib Fan', anchorCount: 2, fib: true, rotatable: false, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
+  fibChannel: { label: 'Fib Channel', anchorCount: 3, fib: true, rotatable: true, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
+  fibSpiral: { label: 'Fib Spiral', anchorCount: 2, fib: true, rotatable: true, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
+  fibTimeZone: { label: 'Fib Time Zone', anchorCount: 2, fib: true, rotatable: false, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
 };
 
 // Zone band rendering: translucent fill + top/bottom borders + labels.

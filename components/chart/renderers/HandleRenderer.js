@@ -74,6 +74,12 @@ export function HandleRenderer({ drawings = [], transform, hover = null, visible
           ctx.strokeStyle = '#4d7cfe';
           square(geometry.center.x, geometry.center.y, active ? 9 : 6, false);
         }
+        if (geometry.midpoint) {
+          const active = isHovered(drawing.id, 'midpoint', -1);
+          ctx.fillStyle = active ? '#ffffff' : '#4d7cfe';
+          ctx.strokeStyle = '#4d7cfe';
+          square(geometry.midpoint.x, geometry.midpoint.y, active ? 7 : 5, true);
+        }
         if (geometry.rotation) {
           const active = isHovered(drawing.id, 'rotation', -1);
           ctx.fillStyle = active ? '#ffffff' : '#4d7cfe';

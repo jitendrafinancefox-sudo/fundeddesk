@@ -2,7 +2,11 @@
 import { drawingPersistence } from '@/services/drawingPersistence';
 import { DRAWING_TYPES } from '../engine/DrawingSchema';
 import { isChannelType, isRegressionType } from './ChannelGeometry';
+import { isFibType } from './FibGeometry';
+import { sanitizeFib } from './FibSerializer';
 
+// v4: Fibonacci tools carry a fib payload { levels, label } describing the
+// visible level set and label formatting.
 // v3: channels store 3-4 anchor points (parallel/flat/disjoint layouts plus
 // the regression window) and regression channels carry a fitted line
 // (drawing.regression = { slope, intercept, count }) which the engine
@@ -10,7 +14,7 @@ import { isChannelType, isRegressionType } from './ChannelGeometry';
 // v2: shapes are stored as full corner anchors (TL/TR/BR/BL) instead of
 // 2-point drag diagonals; rotated shapes carry the rotation in those anchors.
 // v1 payloads still load — the commit funnel promotes legacy diagonals.
-export const DRAWINGS_VERSION = 3;
+export const DRAWINGS_VERSION = 4;
 const VALID_IDENTITY = (drawing) => drawing && typeof drawing.id === 'string' && typeof drawing.symbol === 'string'
   && typeof drawing.timeframe === 'string' && DRAWING_TYPES.includes(drawing.drawingType)
   && Array.isArray(drawing.anchorPoints) && drawing.anchorPoints.length > 0;
@@ -33,6 +37,8 @@ function sanitize(envelope) {
     // the interaction refits when window anchors change. Keep whatever was
     // persisted (null for pre-v3 payloads) so v1/v2 files still render.
     regression: isRegressionType(drawing.drawingType) ? drawing.regression || null : undefined,
+    // Fibonacci tools carry a validated levels/label payload (v4).
+    fib: isFibType(drawing.drawingType) ? sanitizeFib(drawing).fib : undefined,
   }));
 }
 

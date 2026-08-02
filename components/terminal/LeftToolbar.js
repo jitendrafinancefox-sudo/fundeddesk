@@ -33,7 +33,15 @@ const GROUPS = [
     ['regressionChannel', TrendingUp, 'Regression Channel'],
     ['linearRegressionChannel', Crosshair, 'Linear Regression Channel'],
   ] },
-  { id: 'fib', label: 'Fibonacci', icon: TrendingUp, tools: [['fib', TrendingUp, 'Fib Retracement']] },
+  { id: 'fib', label: 'Fibonacci', icon: TrendingUp, tools: [
+    ['fib', TrendingUp, 'Fib Retracement'],
+    ['fibExtension', ArrowRightToLine, 'Fib Extension'],
+    ['fibProjection', Crosshair, 'Fib Projection'],
+    ['fibFan', MoveDiagonal, 'Fib Fan'],
+    ['fibChannel', AlignCenterVertical, 'Fib Channel'],
+    ['fibSpiral', RotateCw, 'Fib Spiral'],
+    ['fibTimeZone', ArrowUpDown, 'Fib Time Zone'],
+  ] },
   { id: 'measure', label: 'Measure', icon: Ruler, tools: [['measure', Ruler, 'Measure']] },
   { id: 'textarrow', label: 'Text / Arrow / Marks', icon: Type, tools: [
     ['text', Type, 'Text Note'],
