@@ -35,7 +35,7 @@ export function createToolManager({ getTransform, getCandles, createDrawing }) {
       if (end && Number.isFinite(end.time) && Number.isFinite(end.price)) pending.end = end;
       pending.drawing = createDrawing({
         drawingType: pending.tool,
-        anchorPoints: anchorCountFor(pending.tool) === 1 ? [pending.start] : [pending.start, pending.end],
+        anchorPoints: anchorCountFor(pending.tool) === 1 ? [pending.end] : [pending.start, pending.end],
       });
       return pending.drawing;
     },

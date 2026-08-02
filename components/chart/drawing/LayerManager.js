@@ -14,7 +14,9 @@ export function createLayerManager({ engine, registry } = {}) {
     isHidden(id) { return hidden.has(id); },
     hiddenIds() { return [...hidden]; },
     // Filter a drawing list by visibility AND z-order (registry order).
-    visibleDrawings(drawings) { return drawings.filter((drawing) => !hidden.has(drawing.id)); },
+    // The persisted `drawing.hidden` flag is the source of truth; the runtime
+    // `hidden` set remains for callers that hide without re-committing.
+    visibleDrawings(drawings) { return drawings.filter((drawing) => !hidden.has(drawing.id) && !drawing.hidden); },
     // Dirty-rect for a single drawing that changed between `before` and
     // `after` (screen-space). Union of both bounds so the old position is
     // also repainted. Returns null when either side is off-screen (caller

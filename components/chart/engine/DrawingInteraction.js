@@ -31,6 +31,9 @@ export class DrawingInteraction {
   // anchor) win over line bodies. Locked/hidden drawings are excluded by
   // the hit-test engine.
   hit(point) { return this.hitTestEngine?.hit(point) || null; }
+  // Same hit, but locked objects are allowed (context menu / properties
+  // must be able to target a locked drawing so it can be unlocked).
+  hitLoose(point) { return this.hitTestEngine?.hit(point, { ignoreLock: true }) || null; }
 
   // Returns true when the pointer grabbed something (a drawing, a marquee,
   // or an Alt-duplicated copy), false when it is free space (caller starts
@@ -288,6 +291,59 @@ export class DrawingInteraction {
 
   selectedIds() { return this.selection.ids(); }
   replaceIn(list, drawing) { return list.map((item) => (item.id === drawing.id ? drawing : item)); }
+
+  // Lock / hide are persisted drawing flags: committed through history so
+  // they survive serialization and are undoable. Locked drawings stay
+  // visible but can never be hit, moved or selected.
+  setFlags(ids, flag, value, label) {
+    const targets = (ids || this.selection.ids()).map((id) => this.registry.get(id)).filter(Boolean);
+    if (!targets.length) return;
+    this.history.beginGroup(label);
+    targets.forEach((drawing) => {
+      if (Boolean(drawing[flag]) === value) return;
+      const next = { ...drawing, [flag]: value };
+      this.history.execute({
+        label,
+        apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+        revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+      });
+    });
+    this.history.endGroup();
+  }
+  lock(ids) { this.setFlags(ids, 'locked', true, 'Lock drawing'); }
+  unlock(ids) { this.setFlags(ids, 'locked', false, 'Unlock drawing'); }
+  hide(ids) { this.setFlags(ids, 'hidden', true, 'Hide drawing'); }
+  show(ids) { this.setFlags(ids, 'hidden', false, 'Show drawing'); }
+
+  // Style patch (properties panel): color / line width etc. Committed as one
+  // undoable delta command.
+  updateStyle(id, patch) {
+    const drawing = this.registry.get(id); if (!drawing) return;
+    const next = { ...drawing, style: { ...(drawing.style || {}), ...patch } };
+    this.history.execute({
+      label: 'Style change',
+      apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+      revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+    });
+  }
+
+  // Z-order move (context menu): reorders the drawing list; registry order
+  // is the render z-order, so this changes stacking without touching data.
+  zMove(id, direction) {
+    const drawing = this.registry.get(id); if (!drawing) return;
+    const before = this.getDrawings();
+    const list = [...before];
+    const index = list.findIndex((item) => item.id === id);
+    if (index === -1) return;
+    list.splice(index, 1);
+    if (direction === 'front') list.push(drawing); else list.unshift(drawing);
+    this.history.execute({
+      label: direction === 'front' ? 'Bring to front' : 'Send to back',
+      apply: () => this.commit(list),
+      revert: () => this.commit(before),
+    });
+  }
+
   groupReplace(list, nexts) {
     const byId = new Map(nexts.map((item) => [item.id, item]));
     return list.map((item) => byId.get(item.id) || item);

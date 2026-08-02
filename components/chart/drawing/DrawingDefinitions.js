@@ -26,6 +26,29 @@ export const DRAWING_DEFINITIONS = {
     render: (ctx, a) => { ctx.beginPath(); ctx.moveTo(a.x, 0); ctx.lineTo(a.x, ctx.canvas.height); ctx.stroke(); },
     hitTest: (drawing, point, transform, threshold) => { const a = transform.anchorToPixel(drawing.anchorPoints[0]); return Boolean(a) && Math.abs(point.x - a.x) <= threshold; },
   },
+  horizontalRay: {
+    label: 'Horizontal Ray',
+    anchorCount: 1,
+    render: (ctx, a) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ctx.canvas.width, a.y); ctx.stroke(); },
+    hitTest: (drawing, point, transform, threshold) => { const a = transform.anchorToPixel(drawing.anchorPoints[0]); return Boolean(a) && point.x >= a.x - 2 && Math.abs(point.y - a.y) <= threshold; },
+  },
+  infoLine: {
+    label: 'Info Line',
+    anchorCount: 1,
+    render: (ctx, a, b, drawing) => {
+      ctx.beginPath(); ctx.moveTo(0, a.y); ctx.lineTo(ctx.canvas.width, a.y); ctx.stroke();
+      const price = drawing.anchorPoints[0]?.price ?? 0;
+      const text = `${(drawing.symbol || 'INFO').toUpperCase()}  ${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      ctx.font = '600 9.5px Inter, sans-serif';
+      ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      const width = ctx.measureText(text).width + 12;
+      ctx.fillStyle = 'rgba(12,18,28,.92)';
+      ctx.fillRect(4, a.y - 9, width, 17);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fillText(text, 10, a.y + 0.5);
+    },
+    hitTest: (drawing, point, transform, threshold) => { const a = transform.anchorToPixel(drawing.anchorPoints[0]); return Boolean(a) && Math.abs(point.y - a.y) <= threshold; },
+  },
   rect: {
     label: 'Rectangle',
     anchorCount: 2,
@@ -83,6 +106,30 @@ export const DRAWING_DEFINITIONS = {
       ctx.closePath(); ctx.fill();
     },
   },
+  arrowMarkUp: {
+    label: 'Arrow Mark Up',
+    anchorCount: 1,
+    render: (ctx, a) => {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y - 8);
+      ctx.lineTo(a.x - 5.5, a.y + 4);
+      ctx.lineTo(a.x + 5.5, a.y + 4);
+      ctx.closePath(); ctx.fill();
+    },
+    hitTest: (drawing, point, transform, threshold) => { const a = transform.anchorToPixel(drawing.anchorPoints[0]); return Boolean(a) && Math.hypot(point.x - a.x, point.y - a.y) <= threshold + 3; },
+  },
+  arrowMarkDown: {
+    label: 'Arrow Mark Down',
+    anchorCount: 1,
+    render: (ctx, a) => {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y + 8);
+      ctx.lineTo(a.x - 5.5, a.y - 4);
+      ctx.lineTo(a.x + 5.5, a.y - 4);
+      ctx.closePath(); ctx.fill();
+    },
+    hitTest: (drawing, point, transform, threshold) => { const a = transform.anchorToPixel(drawing.anchorPoints[0]); return Boolean(a) && Math.hypot(point.x - a.x, point.y - a.y) <= threshold + 3; },
+  },
   measure: {
     label: 'Measure',
     anchorCount: 2,
@@ -136,7 +183,9 @@ function distanceToSegment(point, a, b) {
 
 export const anchorCountFor = (drawingType) => DRAWING_DEFINITIONS[drawingType]?.anchorCount ?? 2;
 export const drawingLabelFor = (drawingType) => DRAWING_DEFINITIONS[drawingType]?.label || drawingType;
-export const renderDrawing = (ctx, drawing, a, b, transform) => DRAWING_DEFINITIONS[drawing.drawingType]?.render?.(ctx, drawing, a, b, transform) ?? segment(ctx, a, b);
+// Convention: every per-tool render receives (ctx, a, b, drawing, transform)
+// where a/b are the first two anchor points projected to screen pixels.
+export const renderDrawing = (ctx, drawing, a, b, transform) => DRAWING_DEFINITIONS[drawing.drawingType]?.render?.(ctx, a, b, drawing, transform) ?? segment(ctx, a, b);
 export const hitTestDrawing = (drawing, point, transform, threshold = 7) => {
   const points = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
   if (!points.length) return false;
