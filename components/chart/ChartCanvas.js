@@ -14,6 +14,10 @@ import { createLayerManager } from './drawing/LayerManager';
 import { createToolManager } from './drawing/ToolManager';
 import { createSerializationManager } from './drawing/SerializationManager';
 import { createHistoryManager } from './HistoryManager';
+import { createHitTestEngine } from './interaction/HitTestEngine';
+import { createHoverManager } from './interaction/HoverManager';
+import { createCursorManager } from './interaction/CursorManager';
+import { createKeyboardShortcutManager } from './interaction/KeyboardShortcutManager';
 
 // Provider-neutral chart surface. The only market-data dependency is the caller
 // supplied candle source; this component can therefore be reused with replay,
@@ -34,6 +38,9 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
   const activeIndicatorsRef = useRef(activeIndicators);
   const drawingsVisibleRef = useRef(drawingsVisible);
   const dragRef = useRef(null);
+  const hoverManagerRef = useRef(null);
+  const cursorManagerRef = useRef(null);
+  const keyboardRef = useRef(null);
   const [axisHover, setAxisHover] = useState(null); // 'price' | 'time' | null — drives the cursor style
 
   // Mount: build the whole drawing subsystem (bus → registry → selection →
@@ -43,8 +50,8 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     const engine = new CanvasChartEngine(canvas, chartKey); engineRef.current = engine;
     const bus = createEventBus();
     const registry = createObjectRegistry();
-    const selection = createSelectionManager({ bus });
     const layers = createLayerManager({ engine });
+    const selection = createSelectionManager({ bus, layers });
     const history = createHistoryManager();
     const serialization = createSerializationManager({ chartKey });
     selectionRef.current = selection; layersRef.current = layers;
@@ -64,6 +71,16 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     const offMarquee = bus.on('selection:marquee', (rect) => engine.setMarquee(rect));
     engine.setSpatialQuery((from, to) => registry.queryRange(from, to));
 
+    const hitTestEngine = createHitTestEngine({ registry, getTransform: () => engine.transform(), layers });
+    const hoverManager = createHoverManager({ hitTestEngine, engine, bus });
+    const cursorManager = createCursorManager({ canvas });
+    const keyboard = createKeyboardShortcutManager({
+      getInteraction: () => drawingInteractionRef.current,
+      getToolManager: () => toolManagerRef.current,
+      selection, engine,
+    });
+    hoverManagerRef.current = hoverManager; cursorManagerRef.current = cursorManager; keyboardRef.current = keyboard;
+
     interactionRef.current = new InteractionController(engine);
     drawingInteractionRef.current = new DrawingInteraction({
       getDrawings: () => drawingsRef.current,
@@ -72,6 +89,8 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
       getCandles: () => candlesRef.current,
       registry, selection, layers, history, bus,
       snap: { magnet: true, mode: 'ohlc' },
+      hitTestEngine,
+      getMods: () => keyboardRef.current?.mods() || {},
     });
     toolManagerRef.current = createToolManager({
       getTransform: () => engine.transform(),
@@ -88,6 +107,8 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
       observer.disconnect();
       offSelection(); offMarquee();
       serialization.flush(drawingsRef.current);
+      keyboard?.destroy(); keyboardRef.current = null;
+      hoverManagerRef.current = null; cursorManagerRef.current = null;
       interactionRef.current?.destroy(); interactionRef.current = null;
       drawingInteractionRef.current = null; toolManagerRef.current = null;
       selectionRef.current = null; layersRef.current = null;
@@ -104,21 +125,10 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
   useEffect(() => { activeIndicatorsRef.current = activeIndicators; engineRef.current?.setIndicators(buildIndicators(candlesRef.current, activeIndicators)); }, [activeIndicators]);
   useEffect(() => { drawingsVisibleRef.current = drawingsVisible; engineRef.current?.setDrawings(drawingsVisible ? drawingsRef.current : []); }, [drawingsVisible, chartKey]);
   useEffect(() => { if (clearRevision) drawingInteractionRef.current?.clearAll(); }, [clearRevision, chartKey]);
-  useEffect(() => {
-    const key = (event) => {
-      const interaction = drawingInteractionRef.current; if (!interaction) return;
-      const mod = event.metaKey || event.ctrlKey;
-      if (event.key === 'Delete' || event.key === 'Backspace') { interaction.delete(); event.preventDefault(); }
-      else if (mod && event.key.toLowerCase() === 'z') { event.shiftKey ? interaction.redo() : interaction.undo(); event.preventDefault(); }
-      else if (mod && event.key.toLowerCase() === 'y') { interaction.redo(); event.preventDefault(); }
-      else if (mod && event.key.toLowerCase() === 'c') { interaction.copy(); event.preventDefault(); }
-      else if (mod && event.key.toLowerCase() === 'v') { interaction.paste(); event.preventDefault(); }
-      else if (mod && event.key.toLowerCase() === 'd') { interaction.duplicate(); event.preventDefault(); }
-      else if (event.key === 'Escape') { interaction.cancelMarquee(); toolManagerRef.current?.cancel(); engineRef.current?.setPendingDrawing(null); selectionRef.current?.clear(); }
-    };
-    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  }, []);
+  useEffect(() => { engineRef.current?.setToolMode(tool); }, [tool, chartKey]);
+  useEffect(() => { applyCursor(); }, [tool, axisHover]);
   function point(event) { const box = canvasRef.current.getBoundingClientRect(); return { x: event.clientX - box.left, y: event.clientY - box.top }; }
+  function applyCursor() { cursorManagerRef.current?.apply({ tool, hover: hoverManagerRef.current?.getHover() || null, panning: Boolean(dragRef.current), axisHover }); }
   const axisDragRef = useRef(null);
   function zoneAt(p) {
     const cv = canvasRef.current; if (!cv) return null;
@@ -132,50 +142,55 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     onPointerDown={(event) => {
       const p = point(event);
       const zone = zoneAt(p);
-      if (zone === 'price') { axisDragRef.current = { type: 'price', lastY: p.y }; return; }
-      if (zone === 'time') { axisDragRef.current = { type: 'time', lastX: p.x, anchorX: p.x }; return; }
+      if (zone === 'price') { axisDragRef.current = { type: 'price', lastY: p.y }; applyCursor(); return; }
+      if (zone === 'time') { axisDragRef.current = { type: 'time', lastX: p.x, anchorX: p.x }; applyCursor(); return; }
       if (tool === 'cursor') {
-        const editing = drawingInteractionRef.current?.pointerDown(p, { additive: event.shiftKey });
+        const editing = drawingInteractionRef.current?.pointerDown(p, { additive: keyboardRef.current?.mods().shift });
         if (!editing) { dragRef.current = p; interactionRef.current?.startPan(p); }
+        applyCursor();
         return;
       }
       const preview = toolManagerRef.current?.begin(tool, p);
       engineRef.current?.setPendingDrawing(preview || null);
+      applyCursor();
     }}
     onPointerMove={(event) => {
       const p = point(event);
       const engine = engineRef.current; if (!engine) return;
-      if (axisDragRef.current?.type === 'price') { engine.dragPriceScale(p.y - axisDragRef.current.lastY); axisDragRef.current.lastY = p.y; return; }
-      if (axisDragRef.current?.type === 'time') { engine.dragBarWidth(p.x - axisDragRef.current.lastX, axisDragRef.current.anchorX); axisDragRef.current.lastX = p.x; return; }
-      if (dragRef.current) { interactionRef.current?.movePan(p); return; }
+      if (axisDragRef.current?.type === 'price') { engine.dragPriceScale(p.y - axisDragRef.current.lastY); axisDragRef.current.lastY = p.y; hoverManagerRef.current?.clear(); applyCursor(); return; }
+      if (axisDragRef.current?.type === 'time') { engine.dragBarWidth(p.x - axisDragRef.current.lastX, axisDragRef.current.anchorX); axisDragRef.current.lastX = p.x; hoverManagerRef.current?.clear(); applyCursor(); return; }
+      if (dragRef.current) { interactionRef.current?.movePan(p); hoverManagerRef.current?.clear(); applyCursor(); return; }
       if (toolManagerRef.current?.isActive()) {
         const prev = toolManagerRef.current.pendingDrawing();
         const next = toolManagerRef.current.update(p);
         const rect = prev && next ? layersRef.current?.dirtyRect(prev, next, engine.transform()) : null;
         engine.setPendingDrawing(next, rect || null);
+        hoverManagerRef.current?.clear();
+        applyCursor();
         return;
       }
       const interaction = drawingInteractionRef.current;
-      if (interaction?.mode || interaction?.marqueeActive) { interaction.pointerMove(p); return; }
+      if (interaction?.mode || interaction?.marqueeActive) { hoverManagerRef.current?.clear(); interaction.pointerMove(p); applyCursor(); return; }
+      hoverManagerRef.current?.update(p);
       engine.setCrosshair(p); setAxisHover(zoneAt(p));
+      applyCursor();
     }}
     onPointerUp={(event) => {
-      if (axisDragRef.current) { axisDragRef.current = null; return; }
-      if (dragRef.current) { dragRef.current = null; interactionRef.current?.endPan(); return; }
+      if (axisDragRef.current) { axisDragRef.current = null; applyCursor(); return; }
+      if (dragRef.current) { dragRef.current = null; interactionRef.current?.endPan(); applyCursor(); return; }
       if (toolManagerRef.current?.isActive()) {
         const drawing = toolManagerRef.current.finish();
         engineRef.current?.setPendingDrawing(null);
         if (drawing) drawingInteractionRef.current?.place(drawing);
+        applyCursor();
         return;
       }
       drawingInteractionRef.current?.pointerUp();
+      applyCursor();
     }}
-    onPointerLeave={() => { axisDragRef.current = null; setAxisHover(null); dragRef.current = null; toolManagerRef.current?.cancel(); engineRef.current?.setPendingDrawing(null); drawingInteractionRef.current?.pointerUp(); interactionRef.current?.endPan(); engineRef.current?.setCrosshair(null); }}
+    onPointerLeave={() => { axisDragRef.current = null; setAxisHover(null); dragRef.current = null; toolManagerRef.current?.cancel(); engineRef.current?.setPendingDrawing(null); drawingInteractionRef.current?.pointerUp(); interactionRef.current?.endPan(); engineRef.current?.setCrosshair(null); hoverManagerRef.current?.clear(); applyCursor(); }}
     onDoubleClick={(event) => { if (zoneAt(point(event)) === 'price') engineRef.current?.resetPriceScale(); }}
     onWheel={(event) => { event.preventDefault(); interactionRef.current?.zoom(event.deltaY, point(event).x); }}
-    style={{
-      display: 'block', width: '100%', height, touchAction: 'none',
-      cursor: axisHover === 'price' ? 'ns-resize' : axisHover === 'time' ? 'ew-resize' : (tool === 'cursor' ? 'grab' : 'crosshair'),
-    }}
+    style={{ display: 'block', width: '100%', height, touchAction: 'none' }}
   />;
 }
