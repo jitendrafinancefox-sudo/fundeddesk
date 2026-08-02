@@ -18,6 +18,8 @@ import { createHitTestEngine } from './interaction/HitTestEngine';
 import { createHoverManager } from './interaction/HoverManager';
 import { createCursorManager } from './interaction/CursorManager';
 import { createKeyboardShortcutManager } from './interaction/KeyboardShortcutManager';
+import ChartContextMenu from './ui/ChartContextMenu';
+import PropertiesPanel from './ui/PropertiesPanel';
 
 // Provider-neutral chart surface. The only market-data dependency is the caller
 // supplied candle source; this component can therefore be reused with replay,
@@ -25,7 +27,7 @@ import { createKeyboardShortcutManager } from './interaction/KeyboardShortcutMan
 const PRICE_AXIS_W = 64; // matches AxisRenderer's right-side label margin
 const TIME_AXIS_H = 24;  // matches TimeAxisRenderer's bottom label margin
 
-export default function ChartCanvas({ exchange, token, interval, symbol = String(token || 'unknown'), timeframe = interval, height = 440, className, onPrice, tool = 'cursor', chartKey = 'default', drawingsVisible = true, clearRevision = 0, activeIndicators = [] }) {
+export default function ChartCanvas({ exchange, token, interval, symbol = String(token || 'unknown'), timeframe = interval, height = 440, className, onPrice, tool = 'cursor', chartKey = 'default', drawingsVisible = true, clearRevision = 0, activeIndicators = [], snap: snapConfig = { magnet: true, mode: 'ohlc' } }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const interactionRef = useRef(null);
@@ -42,6 +44,8 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
   const cursorManagerRef = useRef(null);
   const keyboardRef = useRef(null);
   const [axisHover, setAxisHover] = useState(null); // 'price' | 'time' | null — drives the cursor style
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, id, bounds }
+  const [properties, setProperties] = useState(null);  // { id } — double-click properties panel
 
   // Mount: build the whole drawing subsystem (bus → registry → selection →
   // layers → history → serialization → tool manager) and wire the engine.
@@ -127,8 +131,33 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
   useEffect(() => { if (clearRevision) drawingInteractionRef.current?.clearAll(); }, [clearRevision, chartKey]);
   useEffect(() => { engineRef.current?.setToolMode(tool); }, [tool, chartKey]);
   useEffect(() => { applyCursor(); }, [tool, axisHover]);
+  useEffect(() => {
+    toolManagerRef.current?.configure(snapConfig);
+    if (drawingInteractionRef.current) drawingInteractionRef.current.snap = snapConfig;
+  }, [snapConfig]);
+  useEffect(() => {
+    const close = (event) => { if (event.key === 'Escape') { setContextMenu(null); setProperties(null); } };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, []);
   function point(event) { const box = canvasRef.current.getBoundingClientRect(); return { x: event.clientX - box.left, y: event.clientY - box.top }; }
   function applyCursor() { cursorManagerRef.current?.apply({ tool, hover: hoverManagerRef.current?.getHover() || null, panning: Boolean(dragRef.current), axisHover }); }
+  const propertiesDrawing = properties ? drawingsRef.current.find((drawing) => drawing.id === properties.id) || null : null;
+  const menuDrawing = contextMenu?.id ? drawingsRef.current.find((drawing) => drawing.id === contextMenu.id) || null : null;
+  const runMenuAction = (action) => {
+    const interaction = drawingInteractionRef.current;
+    const id = contextMenu?.id || null;
+    if (action === 'properties' && id) setProperties({ id });
+    else if (action === 'duplicate') interaction?.duplicate();
+    else if (action === 'copy') interaction?.copy();
+    else if (action === 'paste') interaction?.paste();
+    else if (action === 'delete') interaction?.delete();
+    else if (action === 'lock' && id) (menuDrawing?.locked ? interaction?.unlock([id]) : interaction?.lock([id]));
+    else if (action === 'hide' && id) interaction?.hide([id]);
+    else if (action === 'front' && id) interaction?.zMove(id, 'front');
+    else if (action === 'back' && id) interaction?.zMove(id, 'back');
+    else if (action === 'clear') interaction?.clearAll();
+  };
   const axisDragRef = useRef(null);
   function zoneAt(p) {
     const cv = canvasRef.current; if (!cv) return null;
@@ -136,10 +165,12 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
     if (p.y > (cv.clientHeight || height) - TIME_AXIS_H) return 'time';
     return null;
   }
-  return <canvas
+  return <div style={{ position: 'relative', width: '100%', height }}>
+    <canvas
     ref={canvasRef}
     className={className}
     onPointerDown={(event) => {
+      setContextMenu(null);
       const p = point(event);
       const zone = zoneAt(p);
       if (zone === 'price') { axisDragRef.current = { type: 'price', lastY: p.y }; applyCursor(); return; }
@@ -189,8 +220,26 @@ export default function ChartCanvas({ exchange, token, interval, symbol = String
       applyCursor();
     }}
     onPointerLeave={() => { axisDragRef.current = null; setAxisHover(null); dragRef.current = null; toolManagerRef.current?.cancel(); engineRef.current?.setPendingDrawing(null); drawingInteractionRef.current?.pointerUp(); interactionRef.current?.endPan(); engineRef.current?.setCrosshair(null); hoverManagerRef.current?.clear(); applyCursor(); }}
-    onDoubleClick={(event) => { if (zoneAt(point(event)) === 'price') engineRef.current?.resetPriceScale(); }}
+    onDoubleClick={(event) => {
+      const p = point(event);
+      if (zoneAt(p) === 'price') { engineRef.current?.resetPriceScale(); return; }
+      if (tool !== 'cursor') return;
+      const hit = drawingInteractionRef.current?.hitLoose(p);
+      if (hit) { selectionRef.current?.select(hit.id); setProperties({ id: hit.id }); }
+    }}
+    onContextMenu={(event) => {
+      event.preventDefault();
+      const p = point(event);
+      if (toolManagerRef.current?.isActive()) { toolManagerRef.current.cancel(); engineRef.current?.setPendingDrawing(null); }
+      const hit = tool === 'cursor' ? drawingInteractionRef.current?.hitLoose(p) : null;
+      if (hit) selectionRef.current?.select(hit.id);
+      const cv = canvasRef.current;
+      setContextMenu({ x: p.x, y: p.y, id: hit?.id || null, bounds: cv ? { width: cv.clientWidth, height: cv.clientHeight } : null });
+    }}
     onWheel={(event) => { event.preventDefault(); interactionRef.current?.zoom(event.deltaY, point(event).x); }}
     style={{ display: 'block', width: '100%', height, touchAction: 'none' }}
-  />;
+  />
+    {contextMenu && <ChartContextMenu x={contextMenu.x} y={contextMenu.y} id={contextMenu.id} locked={menuDrawing?.locked} hidden={menuDrawing?.hidden} hasClipboard={Boolean(drawingInteractionRef.current?.clipboard?.length)} bounds={contextMenu.bounds} onAction={runMenuAction} onClose={() => setContextMenu(null)} />}
+    {propertiesDrawing && <PropertiesPanel drawing={propertiesDrawing} onStyle={(patch) => drawingInteractionRef.current?.updateStyle(propertiesDrawing.id, patch)} onLockToggle={(locked) => (locked ? drawingInteractionRef.current?.lock([propertiesDrawing.id]) : drawingInteractionRef.current?.unlock([propertiesDrawing.id]))} onClose={() => setProperties(null)} />}
+  </div>;
 }
