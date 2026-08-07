@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { POSTS } from '../page';
+import { POSTS } from '../posts';
 
 function shareCount(slug) {
   let h = 0;

@@ -3,15 +3,17 @@ import { useEffect, useState } from 'react';
 import { supabase, fmt } from '@/lib/supabaseClient';
 import ThemeToggle from '@/components/ThemeToggle';
 
-const TABS = ['Orders', 'Accounts', 'Users', 'Payouts'];
+const TABS = ['Dashboard', 'Orders', 'Accounts', 'Users', 'Payouts', 'Support'];
 
 export default function Admin() {
-  const [tab, setTab] = useState('Orders');
+  const [tab, setTab] = useState('Dashboard');
   const [ready, setReady] = useState(false);
   const [orders, setOrders] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
   const [payouts, setPayouts] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [activities, setActivities] = useState([]);
   const [msg, setMsg] = useState('');
   const [tradeForm, setTradeForm] = useState({});
 
@@ -27,13 +29,15 @@ export default function Admin() {
   }
 
   async function loadAll() {
-    const [o, a, u, p] = await Promise.all([
+    const [o, a, u, p, t, act] = await Promise.all([
       supabase.from('orders').select('*, plans(*), profiles(email, full_name)').order('created_at', { ascending: false }),
       supabase.from('accounts').select('*, plans(*), profiles(email, full_name)').order('created_at', { ascending: false }),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('payouts').select('*, profiles(email), accounts(login_id)').order('created_at', { ascending: false }),
+      supabase.from('support_tickets').select('*, profiles(email, full_name)').order('status', { ascending: false }).order('created_at', { ascending: false }),
+      supabase.from('admin_actions').select('*').order('created_at', { ascending: false }).limit(20),
     ]);
-    setOrders(o.data || []); setAccounts(a.data || []); setUsers(u.data || []); setPayouts(p.data || []);
+    setOrders(o.data || []); setAccounts(a.data || []); setUsers(u.data || []); setPayouts(p.data || []); setTickets(t.data || []); setActivities(act.data || []);
   }
 
   function flash(m) { setMsg(m); setTimeout(() => setMsg(''), 4000); }
@@ -91,6 +95,17 @@ export default function Admin() {
     flash('Payout marked ' + status); loadAll();
   }
 
+  async function closeTicket(t) {
+    const { error } = await supabase.from('support_tickets').update({ status: 'closed' }).eq('id', t.id);
+    if (error) return flash('Error: ' + error.message);
+    try {
+      await supabase.rpc('log_admin_action', {
+        action: 'ticket.close', table_name: 'support_tickets', row_id: t.id, details: {},
+      });
+    } catch (_) {}
+    flash('Ticket closed — ' + (t.profiles?.email || t.email)); loadAll();
+  }
+
   if (!ready) return <div className="wrap" style={{ padding: '80px 0' }}><p className="muted">Checking admin access…</p></div>;
 
   const pending = orders.filter((o) => o.status === 'pending');
@@ -107,7 +122,7 @@ export default function Admin() {
             </div>
           </div>
           <p className="muted" style={{ marginBottom: 24 }}>
-            {users.length} users · {accounts.length} accounts · {pending.length} pending orders
+            {users.length} users · {accounts.length} accounts · {pending.length} pending orders · {tickets.filter((t) => t.status === 'open').length} open tickets
           </p>
           {msg && <div className="ok">{msg}</div>}
 
@@ -119,6 +134,67 @@ export default function Admin() {
               </button>
             ))}
           </div>
+
+          {tab === 'Dashboard' && (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160, 1fr))', gap: 12, marginBottom: 26 }}>
+                <div className="card"><div className="muted" style={{ fontSize: 12 }}>Total Users</div><div className="num" style={{ fontSize: 24, fontWeight: 700 }}>{users.length}</div></div>
+                <div className="card"><div className="muted" style={{ fontSize: 12 }}>Active Accounts</div><div className="num" style={{ fontSize: 24, fontWeight: 700, color: 'var(--green)' }}>{accounts.filter((a) => a.status === 'active').length}</div></div>
+                <div className="card"><div className="muted" style={{ fontSize: 12 }}>Total Revenue</div><div className="num" style={{ fontSize: 24, fontWeight: 700, color: 'var(--blue)' }}>{fmt(orders.filter((o) => o.status === 'approved').reduce((s, o) => s + (o.fee_amount || o.plans?.fee || 0), 0))}</div></div>
+                <div className="card"><div className="muted" style={{ fontSize: 12 }}>Payouts Paid</div><div className="num" style={{ fontSize: 24, fontWeight: 700, color: 'var(--green)' }}>{fmt(payouts.filter((p) => p.status === 'paid').reduce((s, p) => s + (p.amount || 0), 0))}</div></div>
+                <div className="card"><div className="muted" style={{ fontSize: 12 }}>Net</div><div className="num" style={{ fontSize: 24, fontWeight: 700, color: 'var(--gold)' }}>{fmt(orders.filter((o) => o.status === 'approved').reduce((s, o) => s + (o.fee_amount || o.plans?.fee || 0), 0) - payouts.filter((p) => p.status === 'paid').reduce((s, p) => s + (p.amount || 0), 0))}</div></div>
+                <div className="card"><div className="muted" style={{ fontSize: 12 }}>Pending Payouts</div><div className="num" style={{ fontSize: 24, fontWeight: 700, color: 'var(--red)' }}>{fmt(payouts.filter((p) => p.status === 'requested').reduce((s, p) => s + (p.amount || 0), 0))}</div></div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 26 }}>
+                <div>
+                  <h3 style={{ fontSize: 16, marginBottom: 12 }}>Needs Your Attention</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {orders.filter((o) => o.status === 'pending').length > 0 && (
+                      <div className="tag tag-gold" style={{ padding: '4px 10px', fontSize: 13 }}>
+                        {orders.filter((o) => o.status === 'pending').length} pending orders
+                      </div>
+                    )}
+                    {payouts.filter((p) => p.status === 'requested').length > 0 && (
+                      <div className="tag tag-red" style={{ padding: '4px 10px', fontSize: 13 }}>
+                        {payouts.filter((p) => p.status === 'requested').length} pending payouts
+                      </div>
+                    )}
+                    {tickets.filter((t) => t.status === 'open').length > 0 && (
+                      <div className="tag tag-blue" style={{ padding: '4px 10px', fontSize: 13 }}>
+                        {tickets.filter((t) => t.status === 'open').length} open tickets
+                      </div>
+                    )}
+                    {accounts.filter((a) => a.status === 'breached').length > 0 && (
+                      <div className="tag tag-red" style={{ padding: '4px 10px', fontSize: 13 }}>
+                        {accounts.filter((a) => a.status === 'breached').length} breached accounts
+                      </div>
+                    )}
+                    {orders.filter((o) => o.status === 'pending').length === 0 &&
+                     payouts.filter((p) => p.status === 'requested').length === 0 &&
+                     tickets.filter((t) => t.status === 'open').length === 0 &&
+                     accounts.filter((a) => a.status === 'breached').length === 0 && (
+                      <div className="muted" style={{ fontSize: 13 }}>All caught up!</div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 style={{ fontSize: 16, marginBottom: 12 }}>Recent Activity</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflow: 'auto' }}>
+                    {activities.length > 0 ? activities.map((a) => (
+                      <div key={a.id} style={{ fontSize: 13 }}>
+                        <div className="muted" style={{ fontSize: 11 }}>{new Date(a.created_at).toLocaleString('en-IN', { day: 'short', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                        <div>{a.action} · <span className="muted">{a.table_name}</span></div>
+                      </div>
+                    )) : (
+                      <div className="muted" style={{ fontSize: 13 }}>No recent activity.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {tab === 'Orders' && (
             <div className="card" style={{ padding: 0, overflow: 'auto' }}>
@@ -237,8 +313,33 @@ export default function Admin() {
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+           )}
+
+           {tab === 'Support' && (
+             <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+               <table className="tbl num">
+                 <thead><tr><th style={{ paddingLeft: 22 }}>User</th><th>Subject</th><th>Message</th><th>Status</th><th>Date</th><th style={{ paddingRight: 22 }}>Action</th></tr></thead>
+                 <tbody>
+                   {tickets.map((t) => (
+                     <tr key={t.id}>
+                       <td style={{ paddingLeft: 22 }}>{t.profiles?.full_name || t.name}<div className="muted" style={{ fontSize: 12 }}>{t.profiles?.email || t.email}</div></td>
+                       <td>{t.subject}</td>
+                       <td className="muted" style={{ maxWidth: 280 }} title={t.message}>{t.message}</td>
+                       <td><span className={'tag ' + (t.status === 'open' ? 'tag-gold' : 'tag-green')}>{t.status}</span></td>
+                       <td className="muted">{new Date(t.created_at).toLocaleDateString('en-IN', { day: 'short', month: 'short' })}</td>
+                       <td style={{ paddingRight: 22 }}>
+                         {t.status === 'open' && (
+                           <button className="btn btn-green btn-sm" onClick={() => closeTicket(t)}>Close</button>
+                         )}
+                       </td>
+                     </tr>
+                   ))}
+                   {tickets.length === 0 && <tr><td colSpan={6} className="muted" style={{ padding: 24, textAlign: 'center' }}>No support tickets yet.</td></tr>}
+                 </tbody>
+               </table>
+             </div>
+           )}
+         </div>
       </section>
     </main>
   );

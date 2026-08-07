@@ -37,7 +37,7 @@ export default function Nav() {
     setTimeout(() => window.location.replace('/'), 100);
   }
 
-  const inAppRoute = pathname?.startsWith('/portal') || pathname?.startsWith('/admin') || pathname?.startsWith('/india') || pathname?.startsWith('/terminal');
+  const inAppRoute = pathname?.startsWith('/portal') || pathname?.startsWith('/admin') || pathname?.startsWith('/india') || pathname?.startsWith('/terminal') || pathname?.startsWith('/web-terminal');
   const publicPageButLoggedIn = user && (pathname === '/rules' || pathname === '/faq' || pathname === '/challenges');
   if (inAppRoute || publicPageButLoggedIn) return null;
 
@@ -51,7 +51,7 @@ export default function Nav() {
           <Link href="/rules">Trading Rules</Link>
           <Link href="/faq">FAQ</Link>
           <Link href="/blog">Blog</Link>
-          {user && <Link href="/terminal" style={{ color: 'var(--blue)', fontWeight: 700 }}>Terminal</Link>}
+          {user && <Link href="/portal/terminal" style={{ color: 'var(--blue)', fontWeight: 700 }}>Terminal</Link>}
           {user && <Link href="/portal">Dashboard</Link>}
           {isAdmin && <Link href="/admin" style={{ color: 'var(--gold)', fontWeight: 700 }}>Admin</Link>}
         </div>

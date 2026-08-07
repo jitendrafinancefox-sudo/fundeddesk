@@ -23,6 +23,7 @@ const FIB_TOOL_ENABLED = {
   fibChannel: new Set([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]),
   fibSpiral: new Set([0.618, 1, 1.618, 2.618, 4.236]),
   fibTimeZone: new Set([0.618, 1, 1.618, 2.618, 4.236]),
+  trendFib: new Set([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]),
 };
 
 export const isFibToolType = (drawingType) => Boolean(FIB_TOOL_ENABLED[drawingType]);

@@ -1,26 +1,84 @@
 'use client';
 
-// Coalesces invalidations into one animation frame. Dirty regions are unioned;
-// a full invalidation is reserved for viewport/data changes, while overlays can
-// redraw a small rectangle without asking candle/grid renderers to repaint.
+// Coalesces invalidations into one animation frame. Renderers are split into
+// two layers:
+//   base    — grid, candles, indicators, axes, static drawings. These only
+//             change on data/viewport/theme updates, so they paint into an
+//             offscreen canvas (the "base cache") instead of the visible one.
+//   overlay — crosshair, marquee, handles, pending drawing preview. Redrawn
+//             every frame on top of the blitted base cache.
+// Pointer-rate updates (crosshair moves, marquee drags, drawing previews)
+// therefore never repaint candles or grids: the flush just blits the cached
+// base and draws the cheap overlay. The scene is built ONCE per flush and
+// shared by every renderer instead of being reconstructed per renderer.
 export class RenderPipeline {
-  constructor(canvas, renderers) { this.canvas = canvas; this.renderers = renderers; this.pending = null; this.frame = null; }
+  constructor(canvas, renderers, baseCanvas) {
+    this.canvas = canvas;
+    this.base = renderers.base || [];
+    this.overlay = renderers.overlay || [];
+    this.baseCanvas = baseCanvas;
+    this.ratio = 1;
+    this.pending = null;
+    this.frame = null;
+    this.flushed = false;
+    this.sceneFactory = null;
+  }
+  setSceneFactory(fn) { this.sceneFactory = fn; }
   invalidate(reason = 'full', rect = null) {
-    if (!this.pending || reason === 'full') this.pending = { full: reason === 'full', rect };
-    else if (rect) this.pending.rect = union(this.pending.rect, rect);
+    if (reason === 'overlay') {
+      if (this.pending && this.pending.base) { this.pending.overlayFull = true; return; }
+      this.pending = { full: false, rect: null, base: false, overlayFull: true };
+    } else if (reason === 'full') {
+      this.pending = { full: true, rect: null, base: true, overlayFull: true };
+    } else if (this.pending) {
+      if (!this.pending.full) { this.pending.rect = union(this.pending.rect, rect); this.pending.base = true; }
+    } else {
+      this.pending = { full: false, rect, base: true, overlayFull: false };
+    }
     if (!this.frame) this.frame = requestAnimationFrame(() => this.flush());
   }
   flush() {
-    this.frame = null; const dirty = this.pending || { full: true, rect: null }; this.pending = null;
-    const ctx = this.canvas.getContext('2d'); if (!ctx) return;
+    this.frame = null;
+    // First flush is always full so the base cache can never be blitted empty.
+    const dirty = this.flushed ? (this.pending || { full: true, rect: null, base: true, overlayFull: true }) : { full: true, rect: null, base: true, overlayFull: true };
+    this.pending = null;
+    this.flushed = true;
+    const ctx = this.canvas.getContext('2d');
+    const bctx = this.baseCanvas.getContext('2d');
+    if (!ctx || !bctx) return;
+    const scene = this.sceneFactory ? this.sceneFactory() : null;
+    const ratio = this.ratio;
+    const rect = dirty.rect;
+    const basePartial = !dirty.full && rect;
+
+    // 1) Repaint the cached base layer only when data/viewport changed.
+    if (dirty.base) {
+      if (dirty.full) bctx.clearRect(0, 0, this.baseCanvas.width, this.baseCanvas.height);
+      else if (rect) bctx.clearRect(rect.x, rect.y, rect.width, rect.height);
+      for (const renderer of this.base) {
+        bctx.save();
+        if (basePartial) { bctx.beginPath(); bctx.rect(rect.x, rect.y, rect.width, rect.height); bctx.clip(); }
+        renderer(bctx, scene);
+        bctx.restore();
+      }
+    }
+
+    // 2) Blit the cached base onto the visible canvas (source rect in device
+    //    pixels, destination in CSS pixels — the ctx carries the DPR scale).
     if (dirty.full) ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    else if (dirty.rect) ctx.clearRect(dirty.rect.x, dirty.rect.y, dirty.rect.width, dirty.rect.height);
-    // Base and overlay share ONE canvas, so a partial redraw must repaint the
-    // base layer inside the dirty region as well — skipping it would clear the
-    // candles there and never draw them back.
-    this.renderers.forEach((renderer) => {
-      ctx.save(); if (!dirty.full && dirty.rect) { ctx.beginPath(); ctx.rect(dirty.rect.x, dirty.rect.y, dirty.rect.width, dirty.rect.height); ctx.clip(); } renderer.render(ctx, dirty); ctx.restore();
-    });
+    else if (rect) ctx.clearRect(rect.x, rect.y, rect.width, rect.height);
+    if (dirty.full) ctx.drawImage(this.baseCanvas, 0, 0);
+    else if (rect) ctx.drawImage(this.baseCanvas, rect.x * ratio, rect.y * ratio, rect.width * ratio, rect.height * ratio, rect.x, rect.y, rect.width, rect.height);
+
+    // 3) Draw the overlay layer on top of the blit. A rect-only base repaint
+    //    clips the overlay unless an overlay change landed in the same frame.
+    const overlayFull = dirty.full || dirty.overlayFull;
+    for (const renderer of this.overlay) {
+      ctx.save();
+      if (!overlayFull && rect) { ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.width, rect.height); ctx.clip(); }
+      renderer(ctx, scene);
+      ctx.restore();
+    }
   }
   destroy() { if (this.frame) cancelAnimationFrame(this.frame); this.frame = null; this.pending = null; }
 }

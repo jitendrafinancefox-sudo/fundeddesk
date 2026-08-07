@@ -1,27 +1,43 @@
 'use client';
-import { clamp, niceTimeStep, timeLabel } from './CoordinateUtils';
+import { clamp, niceTimeStep } from './CoordinateUtils';
+import { PRICE_AXIS_W } from './AxisConstants';
 
 const MIN_BAR_WIDTH = 2;
 const MAX_BAR_WIDTH = 80;
 
 // Horizontal axis: maps candle indexes ↔ pixels and candle timestamps ↔
 // pixels. The layout is index-based (TradingView's bar-spacing model): the
-// visible window is [to - width/barWidth, to] where `to` is the rightmost
+// visible window is [to - plotWidth/barWidth, to] where `to` is the rightmost
 // index, allowed to float past the data edge so "future" space (and future
 // candles injected by a live feed) scrolls in smoothly.
+//
+// `width` is the full canvas width (used by the axis renderers, which draw the
+// right-side price strip themselves); `plotWidth` is the candle-plot width and
+// IS the coordinate space indexToX/xToIndex work in. Keeping the two separate
+// makes candles sit fully inside the plot area instead of being clipped under
+// the price axis.
 export class TimeScale {
-  constructor({ width = 1, barWidth = 9, rightOffset = 8, candleCount = 0 } = {}) {
-    this.width = width; this.barWidth = barWidth; this.rightOffset = rightOffset; this.candleCount = candleCount;
+  constructor({ width = 1, barWidth = 7, rightOffset = 2.5, candleCount = 0 } = {}) {
+    this.width = width; this.plotWidth = Math.max(1, width - PRICE_AXIS_W);
+    this.barWidth = barWidth; this.rightOffset = rightOffset; this.candleCount = candleCount;
     this.candles = [];           // current candle array (for time lookups)
     this.timeIndex = null;       // cached Map<time, index> — rebuilt only when candles change
     this._lookupVersion = 0;
   }
 
-  setSize(width) { this.width = Math.max(1, width); }
+  setSize(width) { this.width = Math.max(1, width); this.plotWidth = Math.max(1, width - PRICE_AXIS_W); }
   setData(candles) {
-    this.candles = candles || [];
-    this.candleCount = this.candles.length;
-    this.rebuildLookup();
+    candles = candles || [];
+    const prev = this.candles;
+    const prevTail = prev.length ? prev[prev.length - 1] : null;
+    const nextTail = candles.length ? candles[candles.length - 1] : null;
+    // A live tick replaces the last candle (same time) — the time→index map is
+    // unchanged, so skip the rebuild. Rebuilds happen only when a new candle
+    // is appended or the array is swapped entirely.
+    const sameTail = prevTail && nextTail && prevTail.time === nextTail.time;
+    this.candles = candles;
+    this.candleCount = candles.length;
+    if (!sameTail) this.rebuildLookup();
   }
   setBarWidth(barWidth) { this.barWidth = clamp(barWidth, MIN_BAR_WIDTH, MAX_BAR_WIDTH); }
 
@@ -48,18 +64,21 @@ export class TimeScale {
 
   // --- Core layout ---------------------------------------------------------
   getVisibleRange() {
-    const bars = Math.ceil(this.width / this.barWidth);
+    const bars = Math.ceil(this.plotWidth / this.barWidth);
     const to = this.candleCount - 1 + this.rightOffset;
     return { from: to - bars, to };
   }
-  indexToX(index) { const { to } = this.getVisibleRange(); return this.width - (to - index) * this.barWidth - this.barWidth / 2; }
-  xToIndex(x) { const { to } = this.getVisibleRange(); return to - (this.width - x) / this.barWidth + 0.5; }
+  indexToX(index) { const { to } = this.getVisibleRange(); return this.plotWidth - (to - index) * this.barWidth - this.barWidth / 2; }
+  xToIndex(x) { const { to } = this.getVisibleRange(); return to - (this.plotWidth - x) / this.barWidth + 0.5; }
 
   // --- Transform operations (anchored at the gesture point) ----------------
-  pan(deltaX) { this.rightOffset += deltaX / this.barWidth; }
+  pan(deltaX) { this.rightOffset -= deltaX / this.barWidth; }
   zoom(deltaY, anchorX) {
     const before = this.xToIndex(anchorX);
-    this.setBarWidth(this.barWidth * (deltaY > 0 ? 0.88 : 1.14));
+    // Delta-proportional factor: a wheel notch (~±100-120) zooms a sensible
+    // step while trackpad pinch events (many tiny deltas) accumulate smoothly.
+    const factor = Math.exp(-deltaY / 700);
+    this.setBarWidth(this.barWidth * clamp(factor, 0.55, 1.8));
     const after = this.xToIndex(anchorX);
     this.rightOffset += before - after; // keep the candle under the cursor fixed
   }
@@ -125,20 +144,34 @@ export class TimeScale {
   indexToTime(index) { return this.candles[clamp(Math.round(index), 0, this.candles.length - 1)]?.time ?? null; }
 
   // --- Time axis ticks -----------------------------------------------------
-  // Aligns labels to wall-clock steps (nice step from the visible span) so
-  // the axis shows stable, human-readable timestamps while zooming/panning.
+  // Wall-clock ticks (nice step from the visible span) snapped to the CENTER
+  // of the first candle at-or-after each tick time, so labels always sit
+  // directly under a candle like TradingView. Ticks that fall into a data gap
+  // (weekend/holiday) collapse onto the next candle; duplicates are dropped.
+  // `ticks.step` tells the renderer whether the axis is in intraday (HH:MM) or
+  // date mode (dd MMM + month names).
   getTicks(visibleCandles, targetCount = 6) {
     if (!visibleCandles.length) return [];
     const first = visibleCandles[0].candle.time;
     const last = visibleCandles[visibleCandles.length - 1].candle.time;
     const span = Math.max(1, last - first);
-    const step = niceTimeStep(span / targetCount);
+    const step = niceTimeStep(span / Math.max(2, targetCount));
     const ticks = [];
+    ticks.step = step;
     const start = Math.ceil(first / step) * step;
-    for (let time = start; time <= last; time += step) {
-      const x = this.timeToPixel(time);
-      if (x == null) continue;
-      ticks.push({ time, x, label: timeLabel(time, span) });
+    let idx = 0;
+    let prevCandleIndex = -1;
+    for (let time = start; time <= last + step * 1e-6; time += step) {
+      while (idx < visibleCandles.length - 1 && visibleCandles[idx].candle.time < time) idx += 1;
+      const entry = visibleCandles[idx];
+      if (!entry) break;
+      if (entry.index === prevCandleIndex) continue;
+      prevCandleIndex = entry.index;
+      ticks.push({ time: entry.candle.time, x: this.indexToX(entry.index), candle: entry.candle, index: entry.index });
+    }
+    // Always label the first visible candle so the axis never starts empty.
+    if (!ticks.length || ticks[0].index !== visibleCandles[0].index) {
+      ticks.unshift({ time: visibleCandles[0].candle.time, x: this.indexToX(visibleCandles[0].index), candle: visibleCandles[0].candle, index: visibleCandles[0].index });
     }
     return ticks;
   }

@@ -1,125 +1,509 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import ChartCanvas from '@/components/chart/ChartCanvas';
-import TerminalLayout from '@/components/terminal/TerminalLayout';
-import TopToolbar from '@/components/terminal/TopToolbar';
+import { useRef, useCallback, useState, memo, useEffect, useMemo } from 'react';
+import { ChevronUp } from 'lucide-react';
+import TerminalRoot from '@/components/terminal/TerminalRoot';
+import TerminalHeader from '@/components/terminal/TerminalHeader';
+import Workspace from '@/components/terminal/Workspace';
+import ChartGrid from '@/components/terminal/ChartGrid';
 import LeftToolbar from '@/components/terminal/LeftToolbar';
-import IndicatorMenu from '@/components/terminal/IndicatorMenu';
-import RightSidebar from '@/components/terminal/RightSidebar';
-import BottomPanel from '@/components/terminal/BottomPanel';
 import Watchlist from '@/components/terminal/Watchlist';
 import OrderPanel from '@/components/terminal/OrderPanel';
-import PositionPanel from '@/components/terminal/PositionPanel';
-import { useMarketData } from '@/hooks/useMarketData';
-import { useOrders } from '@/hooks/useOrders';
-import { setTradingState } from '@/stores/tradingStore';
+import ScalperPanel from '@/components/terminal/ScalperPanel';
+import OptionChainModal from '@/components/terminal/OptionChainModal';
+import { PaneManagerProvider, usePaneManager, usePanePriceRef, usePanePrice } from '@/components/terminal/PaneManager';
+import { useLayout } from '@/components/terminal/LayoutContext';
+import TerminalDataLayer from '@/components/terminal/TerminalDataLayer';
+import TerminalActions from '@/components/terminal/TerminalActions';
+import AccountManager, { AccountSummary } from '@/components/terminal/AccountManager';
+import PositionManager from '@/components/terminal/PositionManager';
+import OrderManager from '@/components/terminal/OrderManager';
+import RiskPanel from '@/components/terminal/RiskPanel';
+import OrderBook from '@/components/terminal/OrderBook';
+import TradeHistory from '@/components/terminal/TradeHistory';
+import AlertManager from '@/components/terminal/AlertManager';
+import AlertNotifications from '@/components/terminal/AlertNotifications';
+import HotkeyManager from '@/components/terminal/Hotkeys';
+import StatusBar from '@/components/terminal/StatusBar';
+import { TradingStore } from '@/stores/TradingStore';
+import { INDEX_TOKEN, TIMEFRAMES } from './constants';
 
-const INDEX_TOKEN = { NIFTY: '99926000', BANKNIFTY: '99926009' };
-const TIMEFRAMES = [['1m', 'ONE_MINUTE'], ['5m', 'FIVE_MINUTE'], ['15m', 'FIFTEEN_MINUTE'], ['1h', 'ONE_HOUR'], ['1D', 'ONE_DAY']];
-const CAPITAL = 1000000;
-const DAILY_LOSS = 50000;
-const MAX_LOSS = 100000;
-const inr = (value) => '₹' + Math.abs(Math.round(value || 0)).toLocaleString('en-IN');
-const PANEL_HEIGHTS = { '1': 500, '2': 460, '3': 320, '4': 300 };
-const PANEL_COLUMNS = { '1': 1, '2': 2, '3': 3, '4': 2 };
-// Stable reference — an inline arrow here would be a NEW function every
-// render, and ChartCanvas's history-fetch effect depends on it, so a fresh
-// reference every ~1.5s (chain poll) was re-triggering a full history
-// refetch + full redraw on a loop: the flicker, and the zoom/pan getting
-// fought over mid-gesture.
-const noop = () => {};
+// Live price readout for the header. Subscribes only to the price context,
+// so per-tick updates re-render this tiny span — never the chart panes.
+const PanePriceText = memo(function PanePriceText({ paneId }) {
+  const price = usePanePrice(paneId);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const text = mounted && price != null
+    ? price.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+    : '—';
+  return (
+    <span style={{
+      fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 12,
+      color: mounted && price != null ? '#26a69a' : '#b2b5be',
+      fontVariantNumeric: 'tabular-nums',
+    }}>
+      ₹{text}
+    </span>
+  );
+});
 
-export default function TradingTerminal() {
+function TerminalContent() {
   const rootRef = useRef(null);
-  const [underlying, setUnderlying] = useState('NIFTY');
-  const [timeframe, setTimeframe] = useState(TIMEFRAMES[2]);
-  const [selection, setSelection] = useState(null);
-  const [chartMode, setChartMode] = useState('index');
-  const [tool, setTool] = useState('cursor');
-  const [snap, setSnap] = useState({ magnet: true, mode: 'ohlc' });
-  const [drawingsVisible, setDrawingsVisible] = useState(true);
-  const [activeIndicators, setActiveIndicators] = useState([]);
-  const [clearRevision, setClearRevision] = useState(0);
-  const [layout, setLayout] = useState('1');
-  const [positions, setPositions] = useState([]);
-  const [prices, setPrices] = useState({});
-  const [orderOpen, setOrderOpen] = useState(false);
-  const [side, setSide] = useState('BUY');
-  const [lots, setLots] = useState('1');
-  const [sl, setSl] = useState('');
-  const [tp, setTp] = useState('');
-  const [message, setMessage] = useState(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  const { chain, status, error } = useMarketData(underlying);
-  const { openOrder, closeOrder } = useOrders({ positions, setPositions, onClose: () => {} });
+  const {
+    layout, setLayout,
+    activePaneId, activePane,
+    setActivePaneSymbol,
+    setActivePaneTimeframe,
+    setPaneTool,
+    togglePaneDrawings,
+    clearPaneDrawings,
+    togglePaneIndicator,
+    addPane,
+    duplicatePane,
+  } = usePaneManager();
+  const priceRef = usePanePriceRef();
+  const ltp = usePanePrice(activePaneId);
 
-  // The relay supplies fresh chain prices. Keep token-indexed prices so positions,
-  // watchlist and SL/TP rules all use the same market-data boundary.
-  useEffect(() => {
-    if (!chain) return;
-    const next = { [INDEX_TOKEN[underlying]]: +chain.spot || 0 };
-    (chain.rows || []).forEach((row) => { if (row.ceToken) next[row.ceToken] = +row.ce || 0; if (row.peToken) next[row.peToken] = +row.pe || 0; });
-    setPrices(next);
-  }, [chain, underlying]);
+  const {
+    bottom, setBottomTab, toggleBottom, toggleWatchlist,
+  } = useLayout();
 
-  const selectedPrice = selection ? prices[selection.token] : prices[INDEX_TOKEN[underlying]];
-  const floating = positions.reduce((total, position) => {
-    const price = prices[position.token];
-    if (!price) return total;
-    const multiplier = position.lotSize || chain?.lot || 1;
-    return total + (position.side === 'BUY' ? price - position.entry : position.entry - price) * position.lots * multiplier;
-  }, 0);
-  const equity = CAPITAL + floating;
-  const breached = floating <= -MAX_LOSS || floating <= -DAILY_LOSS;
+  const [scalperOpen, setScalperOpen] = useState(false);
 
-  useEffect(() => { setTradingState({ positions, breached }); }, [positions, breached]);
-  useEffect(() => {
-    positions.forEach((position) => {
-      const price = prices[position.token];
-      if (!price) return;
-      const stopHit = position.sl && (position.side === 'BUY' ? price <= position.sl : price >= position.sl);
-      const targetHit = position.tp && (position.side === 'BUY' ? price >= position.tp : price <= position.tp);
-      if (stopHit || targetHit) closePosition(position.id, stopHit ? 'Stop loss hit' : 'Target hit');
+  const getPrice = useCallback(() => priceRef.current[activePaneId] ?? null, [activePaneId, priceRef]);
+  const actionsRef = useRef(null);
+
+  const underlying = activePane.token === INDEX_TOKEN.NIFTY
+    ? 'NIFTY'
+    : activePane.token === INDEX_TOKEN.BANKNIFTY
+    ? 'BANKNIFTY'
+    : activePane.selection?.underlying
+    || (activePane.symbol?.includes('BANKNIFTY') ? 'BANKNIFTY' : 'NIFTY');
+
+  // Build a chart config from a watchlist item. Shared by plain selection
+  // (active pane) and by the "open in new pane" gesture so both go through
+  // exactly the same mapping.
+  const itemToConfig = useCallback((item, chain) => {
+    if (item.position) {
+      return { exchange: 'NFO', token: item.token, symbol: item.symbol_label, chartMode: 'strike', selection: item.position };
+    }
+    if (item.kind === 'index') {
+      const entry = Object.entries(INDEX_TOKEN).find(([, t]) => t === item.token);
+      if (entry) return { exchange: 'NSE', token: item.token, symbol: entry[0], chartMode: 'index', selection: null };
+      return null;
+    }
+    if (item.kind === 'option') {
+      const row = (chain?.rows || []).find((r) => r.ceToken === item.token || r.peToken === item.token);
+      if (row) {
+        const type = row.ceToken === item.token ? 'CE' : 'PE';
+        return {
+          exchange: 'NFO', token: item.token, symbol: `${underlying} ${row.strike} ${type}`,
+          chartMode: 'strike', selection: { underlying, strike: row.strike, type, token: item.token },
+        };
+      }
+      return null;
+    }
+    if (item.kind === 'stock') {
+      return { exchange: 'NSE', token: item.token, symbol: item.symbol_label, chartMode: 'index', selection: null };
+    }
+    return null;
+  }, [underlying]);
+
+  const selectContract = useCallback((row, type) => {
+    const token = type === 'CE' ? row.ceToken : row.peToken;
+    if (!token) return;
+    setActivePaneSymbol('NFO', token, `${underlying} ${row.strike} ${type}`, 'strike', {
+      underlying, strike: row.strike, type, token,
     });
-    // Rules run whenever a new provider price is received.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prices]);
-  useEffect(() => { const onChange = () => setFullscreen(Boolean(document.fullscreenElement)); document.addEventListener('fullscreenchange', onChange); return () => document.removeEventListener('fullscreenchange', onChange); }, []);
+  }, [underlying, setActivePaneSymbol]);
 
-  const watchlist = useMemo(() => [
-    { key: 'NIFTY', label: 'NIFTY 50', token: INDEX_TOKEN.NIFTY, ltp: prices[INDEX_TOKEN.NIFTY] },
-    { key: 'BANKNIFTY', label: 'BANKNIFTY', token: INDEX_TOKEN.BANKNIFTY, ltp: prices[INDEX_TOKEN.BANKNIFTY] },
-    ...positions.slice(0, 4).map((position) => ({ key: position.id, label: `${position.underlying} ${position.strike} ${position.type}`, token: position.token, ltp: prices[position.token], position })),
-  ], [positions, prices]);
+  const selectUnderlying = useCallback((chain) => (item) => {
+    const cfg = itemToConfig(item, chain);
+    if (cfg) setActivePaneSymbol(cfg.exchange, cfg.token, cfg.symbol, cfg.chartMode, cfg.selection);
+  }, [underlying, itemToConfig, setActivePaneSymbol]);
 
-  function flash(kind, text) { setMessage({ kind, text }); window.setTimeout(() => setMessage(null), 4500); }
-  function selectUnderlying(item) { if (item.position) { setSelection(item.position); setChartMode('strike'); } else { setUnderlying(item.key); setSelection(null); setChartMode('index'); } }
-  function selectContract(row, type) { const token = type === 'CE' ? row.ceToken : row.peToken; if (!token) return; setSelection({ underlying, strike: row.strike, type, token }); setChartMode('strike'); }
-  function submitOrder() {
-    if (!selection) return flash('err', 'Pehle option chain se strike select karo.');
-    const quantity = Number(lots);
-    if (!Number.isInteger(quantity) || quantity < 1) return flash('err', 'Lots 1 ya usse zyada hone chahiye.');
-    if (!selectedPrice) return flash('err', 'Live price ka wait karo.');
-    openOrder({ ...selection, side, lots: quantity, entry: selectedPrice, sl: Number(sl) || null, tp: Number(tp) || null, lotSize: chain?.lot || 1 });
-    setOrderOpen(false); setSl(''); setTp(''); flash('ok', `${side} ${quantity} lot ${underlying} ${selection.strike} ${selection.type} @ ${selectedPrice.toFixed(2)}`);
-  }
-  function closePosition(id, reason = 'Position closed') { closeOrder(id, reason); flash('ok', reason); }
-  function toggleFullscreen() { if (!document.fullscreenElement) rootRef.current?.requestFullscreen?.(); else document.exitFullscreen?.(); }
-  const chartToken = chartMode === 'index' ? INDEX_TOKEN[underlying] : selection?.token;
-  const chartExchange = chartMode === 'index' ? 'NSE' : 'NFO';
+  const handleChartOrder = useCallback((side, lots) => {
+    const actions = actionsRef.current;
+    if (!actions) return;
+    actions.setSide(side || 'BUY');
+    if (lots) actions.setLots(String(lots));
+    actions.setOrderOpen(true);
+  }, []);
 
-  return <div ref={rootRef} style={{ background: 'var(--bg)', minHeight: '100vh' }}>
-    <TerminalLayout
-      top={<><TopToolbar underlying={underlying} setUnderlying={(value) => { setUnderlying(value); setSelection(null); setChartMode('index'); }} chain={chain} status={status} breached={breached} fullscreen={fullscreen} onFullscreen={toggleFullscreen} layout={layout} setLayout={setLayout} onOrder={() => selection ? setOrderOpen(true) : flash('err', 'Pehle option chain se strike select karo.')} />{message && <div className={message.kind === 'ok' ? 'ok' : 'err'} style={{ marginBottom: 10 }}>{message.text}</div>}{error && status === 'offline' && <div className="err" style={{ marginBottom: 10 }}>Angel relay unavailable: {error.message}</div>}</>}
-      left={<LeftToolbar tool={tool} setTool={setTool} visible={drawingsVisible} setVisible={setDrawingsVisible} snap={snap} setSnap={setSnap} onClear={() => { setClearRevision((value) => value + 1); flash('ok', 'Drawings cleared for this chart.'); }} />}
-      center={<div style={{ flex: 1, minWidth: 0 }}><div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap', gap: 10 }}><div style={{ fontFamily: 'Manrope', fontWeight: 800 }}>{chartMode === 'index' ? (underlying === 'NIFTY' ? 'NIFTY 50' : 'BANKNIFTY') : `${selection?.underlying} ${selection?.strike} ${selection?.type}`}<span className="num" style={{ marginLeft: 10, color: 'var(--blue)' }}>{selectedPrice?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '—'}</span></div><div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><div style={{ display: 'flex', border: '1px solid var(--line2)', borderRadius: 8, overflow: 'hidden' }}>{TIMEFRAMES.map((tf) => <button key={tf[0]} onClick={() => setTimeframe(tf)} style={{ padding: '5px 8px', background: timeframe[0] === tf[0] ? 'rgba(77,124,254,.18)' : 'transparent', color: timeframe[0] === tf[0] ? 'var(--blue)' : 'var(--muted)' }}>{tf[0]}</button>)}</div><div style={{ display: 'flex', border: '1px solid var(--line2)', borderRadius: 8, overflow: 'hidden' }}><button onClick={() => setChartMode('index')} style={{ padding: '5px 8px', color: chartMode === 'index' ? 'var(--blue)' : 'var(--muted)' }}>Index</button><button disabled={!selection} onClick={() => selection && setChartMode('strike')} style={{ padding: '5px 8px', color: chartMode === 'strike' ? 'var(--blue)' : 'var(--muted)' }}>Strike</button></div><IndicatorMenu active={activeIndicators} setActive={setActiveIndicators} /></div></div><div style={{ display: 'grid', gridTemplateColumns: `repeat(${PANEL_COLUMNS[layout]}, minmax(0, 1fr))`, gap: 10 }}>{Array.from({ length: Number(layout) }, (_, index) =>   <ChartCanvas key={`${chartToken}:${timeframe[0]}:${index}`} exchange={chartExchange} token={chartToken} symbol={chartMode === 'index' ? underlying : `${selection?.underlying}-${selection?.strike}-${selection?.type}`} interval={timeframe[1]} timeframe={timeframe[0]} onPrice={noop} tool={tool} snap={snap} drawingsVisible={drawingsVisible} chartKey={`${chartToken}:${timeframe[0]}:${index}`} clearRevision={clearRevision} activeIndicators={activeIndicators} height={PANEL_HEIGHTS[layout]} />)}</div><div style={{ padding: '8px 14px', fontSize: 10.5, color: 'var(--dim)', borderTop: '1px solid var(--line)' }}>Real market data via Angel One · IST · simulated account — orders are not placed on any exchange</div></div>}
-      right={<RightSidebar><Watchlist items={watchlist} onSelect={selectUnderlying} /><OptionChain chain={chain} selection={selection} onSelect={selectContract} /></RightSidebar>}
-      bottom={<BottomPanel><AccountSummary equity={equity} floating={floating} /><PositionPanel positions={positions} prices={prices} onClose={closePosition} /></BottomPanel>}
-    />
-    <OrderPanel open={orderOpen} selection={selection} chain={chain} side={side} setSide={setSide} lots={lots} setLots={setLots} sl={sl} setSl={setSl} tp={tp} setTp={setTp} onClose={() => setOrderOpen(false)} onSubmit={submitOrder} />
-  </div>;
+  // The chart area needs no live market data — render it once so chain
+  // refreshes never re-render the pane tree.
+  const chartArea = useMemo(() => <ChartGrid onOrder={handleChartOrder} />, [handleChartOrder]);
+
+  return (
+    <div ref={rootRef} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <TerminalActions rootRef={rootRef} activePane={activePane} getPrice={getPrice}>
+        {(actions) => {
+          actionsRef.current = actions;
+          return (
+          <TerminalDataLayer underlying={underlying}>
+            {(data) => {
+              // Header change pill: option selection → chain prev; otherwise
+              // the watchlist quote (stocks only — index prev is unavailable).
+              const change = (() => {
+                const token = activePane.token;
+                if (activePane.selection?.type) {
+                  const row = (data.chain?.rows || []).find((r) => r.ceToken === token || r.peToken === token);
+                  if (row) {
+                    const isCE = row.ceToken === token;
+                    const last = isCE ? +row.ce : +row.pe;
+                    const prev = isCE ? row.prevCe : row.prevPe;
+                    if (last && prev) return { pct: ((last - prev) / prev) * 100 };
+                  }
+                  return null;
+                }
+                const q = data.stockQuotes?.[token];
+                if (q?.ltp && q?.prevClose) return { pct: ((q.ltp - q.prevClose) / q.prevClose) * 100 };
+                return null;
+              })();
+
+              // Compare popover — watchlist instruments vs the active symbol.
+              const compareItems = data.displayedItems
+                .filter((i) => i.token !== activePane.token)
+                .map((i) => {
+                  const q = data.stockQuotes?.[i.token];
+                  const chainPx = data.prices?.[i.token];
+                  return {
+                    ...i,
+                    ltp: chainPx || q?.ltp || null,
+                    change: q?.change ?? null,
+                  };
+                });
+
+              return (
+              <>
+                <TerminalHeader
+                  underlying={activePane.symbol}
+                  timeframe={activePane.timeframe[0]}
+                  setTimeframe={(tf) => {
+                    const found = TIMEFRAMES.find((t) => t[0] === tf);
+                    if (found) setActivePaneTimeframe(found);
+                  }}
+                  chain={data.chain}
+                  status={data.status}
+                  fullscreen={actions.fullscreen}
+                  onFullscreen={actions.toggleFullscreen}
+                  layout={layout}
+                  setLayout={setLayout}
+                  onOptionChain={() => actions.setOptionChainOpen(true)}
+                  onOrder={(side) => { actions.setSide(side || 'BUY'); actions.setOrderOpen(true); }}
+                  onToggleObjects={() => {
+                    window.dispatchEvent(new CustomEvent('fd:objects:toggle'));
+                  }}
+                  onScalper={() => setScalperOpen(true)}
+                  priceNode={<PanePriceText paneId={activePaneId} />}
+                  activeIndicators={activePane.activeIndicators}
+                  setActiveIndicators={(fn) => {
+                    if (typeof fn === 'function') {
+                      const result = fn(activePane.activeIndicators);
+                      if (result !== activePane.activeIndicators) {
+                        const added = result.filter((id) => !activePane.activeIndicators.includes(id));
+                        const removed = activePane.activeIndicators.filter((id) => !result.includes(id));
+                        added.forEach((id) => togglePaneIndicator(activePaneId, id));
+                        removed.forEach((id) => togglePaneIndicator(activePaneId, id));
+                      }
+                    }
+                  }}
+                  onSelectSymbol={selectUnderlying(data.chain)}
+                  onPickTool={(tool) => setPaneTool(activePaneId, tool)}
+                  onFlash={actions.flash}
+                  onReplay={() => window.dispatchEvent(new CustomEvent('fd:replay:toggle'))}
+                  onToggleWatchlist={toggleWatchlist}
+                  change={change}
+                  compareItems={compareItems}
+                  ltp={ltp}
+                  onOpenAccount={() => {
+                    setBottomTab('account');
+                    if (!bottom.open) toggleBottom();
+                  }}
+                />
+                <Workspace
+                  left={
+                    <LeftToolbar
+                      tool={activePane.tool}
+                      setTool={(t) => setPaneTool(activePaneId, t)}
+                      visible={activePane.drawingsVisible}
+                      setVisible={() => togglePaneDrawings(activePaneId)}
+                      onClear={() => clearPaneDrawings(activePaneId)}
+                    />
+                  }
+                  chartArea={chartArea}
+                  right={
+                    <Watchlist
+                      items={data.displayedItems}
+                      prices={data.prices}
+                      stockQuotes={data.stockQuotes}
+                      onSelect={selectUnderlying(data.chain)}
+                      onAdd={(item) => data.addWatchlistItem(item, actions.flash)}
+                      onRemove={(token) => data.removeWatchlistItem(token, actions.flash)}
+                      optionChainRows={data.chain?.rows || []}
+                      activeToken={activePane.token}
+                      onClose={toggleWatchlist}
+                      onOpenNewPane={(item) => {
+                        const cfg = itemToConfig(item, data.chain);
+                        if (cfg) addPane(cfg);
+                      }}
+                      onDuplicateChart={() => duplicatePane(activePaneId)}
+                    />
+                  }
+                  bottomBar={
+                    <BottomBar
+                      activeTab={bottom.tab}
+                      open={bottom.open}
+                      onToggle={toggleBottom}
+                      onTabChange={(tab) => {
+                        if (tab === bottom.tab) {
+                          toggleBottom();
+                        } else {
+                          setBottomTab(tab);
+                          if (!bottom.open) toggleBottom();
+                        }
+                      }}
+                    />
+                  }
+                  bottom={
+                    <BottomPanelContent
+                      tab={bottom.tab}
+                      activePane={activePane}
+                      underlying={underlying}
+                      onOrder={(side) => { actions.setSide(side); actions.setOrderOpen(true); }}
+                    />
+                  }
+                  statusBar={<StatusBar data={data} />}
+                />
+                  <HotkeyManager
+                    onBuy={() => { actions.setSide('BUY'); actions.setOrderOpen(true); actions.flash('ok', 'Buy order panel — Ctrl+B'); }}
+                    onSell={() => { actions.setSide('SELL'); actions.setOrderOpen(true); actions.flash('ok', 'Sell order panel — Ctrl+S'); }}
+                    flash={actions.flash}
+                    onToggleWatchlist={toggleWatchlist}
+                    onToggleDockTab={(tab) => {
+                      if (tab === bottom.tab) { toggleBottom(); return; }
+                      setBottomTab(tab);
+                      if (!bottom.open) toggleBottom();
+                    }}
+                  />
+                <AlertNotifications />
+                <OptionChainModal
+                  open={actions.optionChainOpen}
+                  chain={data.chain}
+                  selection={activePane.selection}
+                  onSelect={selectContract}
+                  onClose={() => actions.setOptionChainOpen(false)}
+                />
+                <OrderPanel
+                  open={actions.orderOpen}
+                  selection={activePane.selection}
+                  chain={data.chain}
+                  side={actions.side}
+                  setSide={actions.setSide}
+                  lots={actions.lots}
+                  setLots={actions.setLots}
+                  sl={actions.sl}
+                  setSl={actions.setSl}
+                  tp={actions.tp}
+                  setTp={actions.setTp}
+                  onClose={() => actions.setOrderOpen(false)}
+                  onSubmit={() => {
+                    actions.submitOrder();
+                    const selection = activePane.selection;
+                    const signalPrice = getPrice();
+                    if (!selection || !signalPrice) return;
+                    TradingStore.placeOrder({
+                      exchange: activePane.exchange,
+                      token: activePane.token,
+                      symbol: activePane.symbol,
+                      underlying,
+                      kind: 'option',
+                      side: actions.side,
+                      lots: Number(actions.lots) || 1,
+                      signalPrice,
+                      sl: parseFloat(actions.sl) || null,
+                      tp: parseFloat(actions.tp) || null,
+                    });
+                  }}
+                />
+                <ScalperPanel
+                  open={scalperOpen}
+                  selection={activePane.selection}
+                  chain={data.chain}
+                  prices={data.prices}
+                  onClose={() => setScalperOpen(false)}
+                  onSubmit={() => { setScalperOpen(false); actions.setOrderOpen(true); }}
+                />
+              </>
+            );
+            }}
+          </TerminalDataLayer>
+          );
+        }}
+      </TerminalActions>
+    </div>
+  );
 }
 
-function OptionChain({ chain, selection, onSelect }) { return <div className="card" style={{ padding: 0 }}><div style={{ padding: '10px 13px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between' }}><h3 style={{ fontSize: 13.5 }}>Option Chain</h3><span className="dim" style={{ fontSize: 11 }}>click CE / PE</span></div><div style={{ maxHeight: 290, overflowY: 'auto' }}><table className="num" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><th>CALL LTP</th><th>STRIKE</th><th>PUT LTP</th></tr></thead><tbody>{(chain?.rows || []).map((row) => <tr key={row.strike}><td onClick={() => onSelect(row, 'CE')} style={{ textAlign: 'center', padding: 8, cursor: 'pointer', color: selection?.token === row.ceToken ? 'var(--blue)' : undefined }}>{row.ce ?? '—'}</td><td style={{ textAlign: 'center', padding: 8, borderLeft: '1px solid var(--line)', borderRight: '1px solid var(--line)', color: row.strike === chain?.atm ? 'var(--gold)' : undefined }}>{row.strike}</td><td onClick={() => onSelect(row, 'PE')} style={{ textAlign: 'center', padding: 8, cursor: 'pointer', color: selection?.token === row.peToken ? 'var(--blue)' : undefined }}>{row.pe ?? '—'}</td></tr>)}{!chain?.rows?.length && <tr><td colSpan="3" className="muted" style={{ padding: 16, textAlign: 'center' }}>Chain load ho rahi hai…</td></tr>}</tbody></table></div></div>; }
-function AccountSummary({ equity, floating }) { return <div className="card num" style={{ padding: '10px 18px', display: 'flex', gap: 26, flexWrap: 'wrap', marginBottom: 10, fontSize: 13.5 }}><Metric label="Balance" value={inr(CAPITAL)} /><Metric label="Equity" value={inr(equity)} color={floating >= 0 ? 'var(--green)' : 'var(--red)'} /><Metric label="Floating P&L" value={(floating >= 0 ? '+' : '−') + inr(floating)} color={floating >= 0 ? 'var(--green)' : 'var(--red)'} /><span className="dim" style={{ marginLeft: 'auto', fontSize: 11 }}>Daily Loss ₹50,000 · Max Loss ₹1,00,000 (auto-breach)</span></div>; }
-function Metric({ label, value, color }) { return <div><div className="dim" style={{ fontSize: 11 }}>{label}</div><b style={{ color }}>{value}</b></div>; }
+export default function TradingTerminal() {
+  return (
+    <PaneManagerProvider>
+      <TerminalRoot>
+        <TerminalContent />
+      </TerminalRoot>
+    </PaneManagerProvider>
+  );
+}
+
+function BottomBar({ activeTab, onTabChange, open, onToggle }) {
+  const tabs = [
+    { id: 'account', label: 'Account Manager' },
+    { id: 'trade', label: 'Trade' },
+    { id: 'orders', label: 'Orders' },
+    { id: 'positions', label: 'Positions' },
+    { id: 'history', label: 'History' },
+    { id: 'funds', label: 'Funds' },
+    { id: 'holdings', label: 'Holdings' },
+    { id: 'alerts', label: 'Alerts' },
+  ];
+
+  return (
+    <>
+      {/* Collapse arrow — ▼ collapsed / ▲ expanded. Only collapses the body,
+          never hides tabs. */}
+      <button
+        onClick={onToggle}
+        title={open ? 'Collapse panel' : 'Expand panel'}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 24, height: 24, borderRadius: 4, flexShrink: 0,
+          background: 'transparent', border: 'none',
+          color: '#787b86', cursor: 'pointer', marginRight: 2,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        <ChevronUp size={14} style={{ transform: open ? 'none' : 'rotate(180deg)', transition: 'transform 0.15s' }} />
+      </button>
+
+      {/* Tabs — always all visible, span naturally left -> right */}
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => onTabChange(tab.id)}
+          style={{
+            padding: '0 10px',
+            height: '100%',
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            borderBottom: activeTab === tab.id ? '2px solid #2962ff' : '2px solid transparent',
+            color: activeTab === tab.id ? '#2962ff' : '#787b86',
+            fontWeight: activeTab === tab.id ? 600 : 500,
+            cursor: 'pointer',
+            transition: 'all 0.1s',
+            fontFamily: 'Inter, sans-serif',
+            fontSize: 11,
+          }}
+          onMouseEnter={(e) => { if (activeTab !== tab.id) e.currentTarget.style.color = '#222222'; }}
+          onMouseLeave={(e) => { if (activeTab !== tab.id) e.currentTarget.style.color = '#787b86'; }}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </>
+  );
+}
+
+function BottomPanelContent({ tab, activePane, underlying, onOrder }) {
+  if (tab === 'account') {
+    return <AccountManager onLogout={() => {}} onOpenSection={(id) => {}} />;
+  }
+
+  if (tab === 'trade') {
+    const kind = activePane.selection ? 'option' : 'index';
+    return (
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', minWidth: 0 }}>
+        <div style={{ flex: 1.15, minWidth: 0, borderRight: '1px solid #e0e3eb', display: 'flex' }}>
+          <RiskPanel selection={activePane.selection} underlying={underlying} token={activePane.token} kind={kind} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+          <OrderBook token={activePane.token} kind={kind} />
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === 'orders') {
+    return <OrderManager />;
+  }
+
+  if (tab === 'positions') {
+    return <PositionManager />;
+  }
+
+  if (tab === 'history') {
+    return <TradeHistory />;
+  }
+
+  if (tab === 'alerts') {
+    return <AlertManager activePane={activePane} />;
+  }
+
+  if (tab === 'funds') {
+    return (
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
+        <div style={{ padding: '8px 14px', borderBottom: '1px solid #e0e3eb', fontSize: 12, fontWeight: 700, color: '#222222', fontFamily: 'Inter, sans-serif' }}>
+          Funds & Margin
+        </div>
+        <AccountSummary />
+        <div style={{ flex: 1 }} />
+      </div>
+    );
+  }
+
+  if (tab === 'holdings') {
+    return (
+      <div className="terminal-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'Inter, sans-serif' }}>
+          <thead>
+            <tr style={{ position: 'sticky', top: 0, background: '#f8f9fa', zIndex: 10 }}>
+              <th style={thStyle}>Symbol</th>
+              <th style={thStyle}>Qty</th>
+              <th style={thStyle}>Buy Price</th>
+              <th style={thStyle}>Current</th>
+              <th style={thStyle}>P&L</th>
+              <th style={thStyle}>Time</th>
+              <th style={thStyle}>Exchange</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colSpan="7" style={{ padding: 20, textAlign: 'center', color: '#787b86' }}>No holdings</td></tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+const thStyle = {
+  textAlign: 'left',
+  padding: '6px 10px',
+  fontWeight: 600,
+  fontSize: 11,
+  color: '#787b86',
+  borderBottom: '1px solid #e0e3eb',
+  fontFamily: 'Inter, sans-serif',
+};
+
+const tdStyle = {
+  padding: '6px 10px',
+  borderBottom: '1px solid #e0e3eb',
+  fontSize: 11,
+  fontWeight: 500,
+  color: '#222222',
+  fontVariantNumeric: 'tabular-nums',
+  fontFamily: 'Inter, sans-serif',
+};

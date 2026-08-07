@@ -5,11 +5,17 @@
 // angle lock and duplicate-drag. Inputs (text fields, contenteditable) are
 // never intercepted. Commands are dispatched to the current interaction
 // instance through getters, so the manager outlives chart remounts safely.
+//
+// The manager binds on `window`, so every mounted chart receives every key
+// event. Command dispatch is gated behind the `active()` getter (defaults to
+// true for standalone charts) so that with multiple panes open only the
+// ACTIVE pane's drawings react to Delete / Ctrl+C / Ctrl+V / Ctrl+Z / Escape.
 const isTyping = (target) => target instanceof HTMLInputElement
   || target instanceof HTMLTextAreaElement
   || Boolean(target?.isContentEditable);
 
-export function createKeyboardShortcutManager({ getInteraction, getToolManager, selection, engine }) {
+export function createKeyboardShortcutManager({ getInteraction, getToolManager, selection, engine, active }) {
+  const isActive = () => !active || active();
   const mods = { shift: false, alt: false, ctrl: false };
   const setMod = (key, value) => {
     if (key === 'Shift') mods.shift = value;
@@ -19,6 +25,7 @@ export function createKeyboardShortcutManager({ getInteraction, getToolManager, 
   const down = (event) => {
     if (isTyping(event.target)) return;
     setMod(event.key, true);
+    if (!isActive()) return;
     const interaction = getInteraction?.();
     const mod = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();

@@ -1,27 +1,29 @@
 'use client';
 import { clamp, niceStep, fmtPrice } from './CoordinateUtils';
 
-const MIN_TICK_SPACING = 34; // px between horizontal gridlines at 6 targets
-
-// Vertical axis: maps price ↔ pixels. Linear by default; a log mode flag is
-// wired into the mapping so switching scale types later touches one property
-// instead of every renderer.
+// TradingView-style vertical axis: maps price ↔ pixels.
+// topPadding = 8% of chart height, bottomPadding = 4% of chart height.
+// Linear by default; log mode flag wired in.
 export class PriceScale {
   constructor({ height = 1, priceMin = 0, priceMax = 1, pricePadding = 0.08, log = false } = {}) {
     this.height = height; this.priceMin = priceMin; this.priceMax = priceMax; this.pricePadding = pricePadding;
-    this.log = log; this.manual = false; // true while the user drags the axis (auto-fit paused)
+    this.log = log; this.manual = false;
   }
+
+  get topPadding() { return Math.round(this.height * 0.005); }
+  get bottomPadding() { return Math.round(this.height * 0.005); }
 
   setSize(height) { this.height = Math.max(1, height); }
   setLogMode(log) { this.log = Boolean(log); this._recomputeBounds(); }
 
-  // Auto-fit: expand [low, high] by a small padding ratio, anchored on the
-  // spread. Skipped entirely while the user is dragging the axis.
+  // Auto-fit: expand [low, high] by the padding ratio (~8% per side,
+  // TradingView's default margin), anchored on the spread. Symmetric so the
+  // visible candles stay vertically centered.
   fit(low, high) {
     if (this.manual) return;
     if (!Number.isFinite(low) || !Number.isFinite(high)) return;
     const spread = Math.max(high - low, Math.abs(high) * 0.001, 1);
-    const padded = spread * this.pricePadding;
+    const padded = spread * 0.08;
     this.priceMin = low - padded; this.priceMax = high + padded;
     this._recomputeBounds();
   }
@@ -46,26 +48,48 @@ export class PriceScale {
     return (price - this.priceMin) / range;
   }
 
-  priceToY(price) { return (1 - this._u(price)) * this.height; }
+  priceToY(price) {
+    const chartH = this.height - this.topPadding - this.bottomPadding;
+    return this.topPadding + (1 - this._u(price)) * chartH;
+  }
   yToPrice(y) {
-    const u = clamp(1 - y / this.height, 0, 1);
+    const chartH = this.height - this.topPadding - this.bottomPadding;
+    const u = clamp(1 - (y - this.topPadding) / chartH, 0, 1);
     if (this.log) return this._lo * (this._hi / this._lo) ** u;
     return this.priceMin + u * (this.priceMax - this.priceMin);
   }
 
-  // "Nice" horizontal ticks: step chosen from 1/2/2.5/5×10^n, labels aligned
-  // to that step so the grid and price labels always line up while zooming.
-  getTicks(targetCount = 6) {
+  // TradingView-style ticks: dynamic target count based on available height,
+  // nice round intervals, major/minor classification for grid rendering.
+  getTicks(targetCount) {
+    const chartH = this.height - this.topPadding - this.bottomPadding;
+    const count = targetCount || Math.max(4, Math.min(12, Math.floor(chartH / 50)));
     const range = Math.abs(this.priceMax - this.priceMin);
     if (!(range > 0)) return [];
-    const step = niceStep(range / targetCount);
+    const step = niceStep(range / count);
+    const minorStep = step / 5;
     const ticks = [];
-    const start = Math.ceil(this.priceMin / step) * step;
+    const start = Math.floor(this.priceMin / step) * step;
+
+    // Major ticks
     for (let price = start; price <= this.priceMax + step * 1e-9; price += step) {
       const y = this.priceToY(price);
-      if (y < -8 || y > this.height + 8) continue;
-      ticks.push({ price, y, label: fmtPrice(price, step) });
+      if (y < this.topPadding - 4 || y > this.height - this.bottomPadding + 4) continue;
+      ticks.push({ price, y, label: fmtPrice(price, step), major: true, step });
     }
+
+    // Minor ticks (no labels, just positions for grid)
+    const minorStart = Math.floor(this.priceMin / minorStep) * minorStep;
+    for (let price = minorStart; price <= this.priceMax + minorStep * 1e-9; price += minorStep) {
+      const y = this.priceToY(price);
+      if (y < this.topPadding - 4 || y > this.height - this.bottomPadding + 4) continue;
+      // Skip if this is a major tick position
+      const isMajor = ticks.some(t => Math.abs(t.price - price) < step * 1e-9);
+      if (!isMajor) {
+        ticks.push({ price, y, major: false });
+      }
+    }
+
     return ticks;
   }
 }

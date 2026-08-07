@@ -1,19 +1,28 @@
 :root{
+  --topbar-bg:rgba(255,255,255,.85); --sidebar-bg1:rgba(255,255,255,.9); --sidebar-bg2:rgba(240,247,243,.95);
+  --bg:#ffffff; --bg2:#f8f9fa; --card:#ffffff; --card2:#fafafa;
+  --line:rgba(0,0,0,.06); --line2:rgba(0,0,0,.10);
+  --blue:#2962ff; --accent:#2962ff; --violet:#2DD4BF;
+  --grad:linear-gradient(96deg,#16C784,#0E9F68);
+  --green:#26a69a; --red:#ef5350; --gold:#F5B93E;
+  --text:#131722; --muted:#787b86; --dim:#b2b5be;
+  --r:16px;
+  /* Terminal theme — TradingView light */
+  --terminal-bg:#ffffff;
+  --surface:#ffffff;
+  --border:#e0e3eb;
+}
+/* dark mode — toggled via the moon/sun button */
+:root.light-theme{
   --topbar-bg:rgba(10,12,21,.85); --sidebar-bg1:rgba(20,26,43,.55); --sidebar-bg2:rgba(10,12,21,.7);
   --bg:#06070C; --bg2:#0A0C15; --card:#0E111C; --card2:#141A2B;
   --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
-  --blue:#22C58B; --violet:#2DD4BF;
-  --grad:linear-gradient(96deg,#16C784,#0E9F68);
+  --blue:#22C58B; --accent:#4F8DFF; --violet:#2DD4BF;
   --green:#22C58B; --red:#F0525F; --gold:#F5B93E;
   --text:#F2F4FA; --muted:#98A2B8; --dim:#5E6780;
-  --r:16px;
-}
-/* light mode — toggled via the moon/sun button in the portal topbar */
-:root.light-theme{
-  --topbar-bg:rgba(255,255,255,.85); --sidebar-bg1:rgba(255,255,255,.9); --sidebar-bg2:rgba(240,247,243,.95);
-  --bg:#F4F7F5; --bg2:#ECF2EE; --card:#FFFFFF; --card2:#F5F9F6;
-  --line:rgba(15,30,22,.10); --line2:rgba(15,30,22,.16);
-  --text:#0E1912; --muted:#4C5C53; --dim:#7C8C82;
+  --terminal-bg:#131722;
+  --surface:#1e222d;
+  --border:#2a2e39;
 }
 :root.light-theme body{background:var(--bg)}
 :root.light-theme .bg-base,:root.light-theme .bg-grid,:root.light-theme .bg-noise{opacity:.4}
@@ -33,6 +42,15 @@ input:focus,select:focus{border-color:var(--blue)}
 .num{font-variant-numeric:tabular-nums}
 .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .muted{color:var(--muted)} .dim{color:var(--dim)} .green{color:var(--green)} .red{color:var(--red)}
+
+/* terminal scrollbars: thin where scrolling is needed; the drawing toolbar
+   scrolls without a visible scrollbar (TradingView style) but every tool stays reachable */
+.terminal-scroll{scrollbar-width:thin;scrollbar-color:#d1d4dc transparent}
+.terminal-scroll::-webkit-scrollbar{width:6px;height:6px}
+.terminal-scroll::-webkit-scrollbar-thumb{background:#d1d4dc;border-radius:3px}
+.terminal-scroll::-webkit-scrollbar-track{background:transparent}
+.td-toolbar{overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.td-toolbar::-webkit-scrollbar{display:none;width:0;height:0}
 
 .demo-bar{position:fixed;top:0;left:0;right:0;z-index:300;background:#12151F;color:#8B93A8;font-size:11px;text-align:center;padding:5px 10px;letter-spacing:.06em;border-bottom:1px solid var(--line)}
 .demo-bar b{color:#C9CFDE}

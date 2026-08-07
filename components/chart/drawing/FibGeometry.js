@@ -24,7 +24,7 @@ import { fibLevelManager } from './FibLevelManager';
 const MARGIN = 20000;
 const HORIZONTAL_TYPES = ['fib', 'fibExtension', 'fibProjection'];
 
-export const isFibType = (drawingType) => ['fib', 'fibExtension', 'fibProjection', 'fibFan', 'fibChannel', 'fibSpiral', 'fibTimeZone'].includes(drawingType);
+export const isFibType = (drawingType) => ['fib', 'fibExtension', 'fibProjection', 'fibFan', 'fibChannel', 'fibSpiral', 'fibTimeZone', 'trendFib'].includes(drawingType);
 
 const midpointOf = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 

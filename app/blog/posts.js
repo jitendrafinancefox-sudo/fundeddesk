@@ -1,0 +1,58 @@
+export const POSTS = [
+  {
+    slug: 'why-most-traders-fail-phase-1',
+    tag: 'Evaluation Tips',
+    title: 'Why Most Traders Fail Phase 1 (And How to Not Be One of Them)',
+    excerpt: "The profit target isn't usually what breaks traders — it's the daily loss limit, hit on an oversized revenge trade. Here's how to structure your risk per trade before you take your first position.",
+    date: 'Jul 2026',
+    read: '5 min read',
+    body: [
+      "Most traders who fail Phase 1 don't fail because the profit target was too hard. They fail because one bad morning turns into one oversized trade, and one oversized trade turns into a breached daily loss limit before lunch.",
+      "The fix isn't a better strategy — it's arithmetic you do before the market opens, not after a loss. Decide your maximum risk per trade as a fixed percentage of your daily loss limit — most consistent passers risk no more than 15-20% of their daily limit on any single position. That means even three losing trades in a row still leaves room to trade the next day.",
+      "The second habit that separates passers from breachers: they stop trading for the day the moment they're down 50% of their daily limit, win or lose. Not because the rules force them to — because they've learned that revenge-trading back losses is how a recoverable day becomes a breached account.",
+      "None of this is about being a better trader on your best day. It's about being a disciplined trader on your worst one.",
+    ],
+  },
+  {
+    slug: 'static-vs-trailing-drawdown',
+    tag: 'Risk Management',
+    title: 'Static vs Trailing Drawdown: Why It Matters More Than Your Strategy',
+    excerpt: 'A static max-loss floor behaves very differently from a trailing one once you\'re in profit. Understanding which type your account uses changes how aggressively you can scale in.',
+    date: 'Jul 2026',
+    read: '6 min read',
+    body: [
+      "Two accounts with an identical '10% max loss' rule can behave completely differently depending on one word: static or trailing.",
+      "A static max-loss floor is calculated once, from your starting balance, and never moves. If you start with ₹10,00,000 and the max loss is 10%, your floor is ₹9,00,000 — permanently. Once you're up 15%, your floor is still ₹9,00,000, meaning you're now trading with an effective cushion of 25% before breach.",
+      "A trailing max-loss floor moves up with your peak equity. Hit ₹11,50,000 in profit, and your new floor becomes ₹10,35,000 — your cushion never grows past the original 10%, no matter how much you're up.",
+      "FundedDesk uses a static floor, which is exactly why our Rules page states it as plainly as it does: it's the single biggest factor in how aggressively you can size up once you're ahead, and traders coming from trailing-drawdown platforms often under-size out of habit.",
+    ],
+  },
+  {
+    slug: 'reading-the-nifty-option-chain',
+    tag: 'Options Basics',
+    title: 'Reading the NIFTY Option Chain Like a Prop Desk',
+    excerpt: 'ATM, OTM, OI buildup, and what the CE/PE skew is actually telling you before you place a directional bet.',
+    date: 'Jul 2026',
+    read: '7 min read',
+    body: [
+      "The option chain looks like a wall of numbers until you know which three columns actually move the decision: LTP, Open Interest change, and the CE/PE skew around the ATM strike.",
+      "Start with ATM — the strike closest to the current spot price. Everything above it on the call side is OTM (out of the money); everything below is ITM (in the money), and it's reversed for puts. Most retail traders overpay for far-OTM options because the premium looks 'cheap' — cheap premiums usually mean cheap odds, not a bargain.",
+      "Open Interest (OI) buildup tells you where big money is actually positioned, not where price is guessing it'll go. A strike with unusually high OI acting as resistance or support is often more reliable than a chart pattern alone.",
+      "The CE/PE skew — comparing call premiums to put premiums at equidistant strikes — is the market's own read on directional bias. When it's wide, options desks are pricing in real expected movement, not just time decay. Reading this before you take a directional bet is the difference between trading with the market's own information and trading against it.",
+    ],
+  },
+  {
+    slug: 'from-funded-to-first-payout',
+    tag: 'Payouts',
+    title: 'From Funded to First Payout: What Actually Happens After You Pass',
+    excerpt: 'KYC, minimum trading days, and how the payout split schedule works once your account moves to the funded stage.',
+    date: 'Jul 2026',
+    read: '4 min read',
+    body: [
+      "Passing your evaluation is the milestone everyone talks about — but the funded-to-payout journey has its own short checklist, and knowing it in advance saves you a week of waiting.",
+      "The moment your account moves to the funded phase, KYC verification kicks in — a one-time identity check tied to the bank account you'll actually be paid into. Most traders complete this the same day; it's the single biggest thing worth doing immediately rather than putting off.",
+      "Next comes the minimum trading day count — five distinct days with at least one closed trade each, profit or loss doesn't matter for this specific rule. It exists so payouts reflect real trading behaviour, not a single lucky session.",
+      "Once both are done, your first payout request can go in any time you're in profit. Processing is designed to move in hours, not weeks, and every payout — pending, paid, or rejected — stays visible on your own dashboard so you're never guessing where it stands.",
+    ],
+  },
+];

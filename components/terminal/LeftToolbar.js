@@ -1,31 +1,40 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { MousePointer2, Slash, Minus, Square, Circle, Triangle, RotateCw, Box, Layers, Type, Eye, EyeOff, Trash2, ArrowUpDown, ArrowRight, MoveDiagonal, TrendingUp, Ruler, Check, ArrowRightToLine, ArrowUp, ArrowDown, Info, Magnet, Crosshair, PanelRight, AlignCenterVertical, Brush, Highlighter, Eraser, Pencil, PenLine, Spline, CircleDashed } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  MousePointer2, Slash, Minus, Square, Circle, Triangle, RotateCw, Box, Layers, Type,
+  Eye, EyeOff, Trash2, ArrowUpDown, ArrowRight, MoveDiagonal, TrendingUp, Ruler,
+  ArrowRightToLine, ArrowUp, ArrowDown, Info, Crosshair, PanelRight, AlignCenterVertical,
+  Brush, Highlighter, Eraser, Pencil, PenLine, Spline, CircleDashed, TrendingDown, Scale,
+  Gauge, BadgeDollarSign, SlidersHorizontal, StickyNote, MessageSquare, MessageSquareText,
+  MessageCircle, Pin, Clock, Tag, Star, ChevronRight,
+} from 'lucide-react';
+import { loadManagerState, toggleFavorite } from '@/components/chart/drawing/DrawingManager';
 
 const GROUPS = [
   { id: 'cursor', label: 'Cursor', icon: MousePointer2, tools: [['cursor', MousePointer2, 'Cursor']] },
-  { id: 'lines', label: 'Lines', icon: Slash, tools: [
+  { id: 'lines', label: 'Trend Line', icon: Slash, tools: [
     ['trend', Slash, 'Trend Line'],
     ['ray', ArrowRight, 'Ray'],
     ['extended', MoveDiagonal, 'Extended Line'],
+    ['crossline', Crosshair, 'Cross Line'],
     ['hline', Minus, 'Horizontal Line'],
     ['horizontalRay', ArrowRightToLine, 'Horizontal Ray'],
     ['vline', ArrowUpDown, 'Vertical Line'],
   ] },
-  { id: 'shapes', label: 'Shapes', icon: Square, tools: [
+  { id: 'shapes', label: 'Rectangle', icon: Square, tools: [
     ['rect', Square, 'Rectangle'],
     ['rotatedRect', RotateCw, 'Rotated Rectangle'],
     ['circle', Circle, 'Circle'],
     ['ellipse', Circle, 'Ellipse'],
     ['triangle', Triangle, 'Triangle'],
   ] },
-  { id: 'zones', label: 'Zones', icon: Layers, tools: [
+  { id: 'zones', label: 'Supply Zone', icon: Box, tools: [
     ['supplyZone', Box, 'Supply Zone'],
     ['demandZone', Box, 'Demand Zone'],
     ['smcZone', Layers, 'SMC Zone'],
     ['premiumDiscountZone', Layers, 'Premium / Discount'],
   ] },
-  { id: 'channels', label: 'Channels', icon: PanelRight, tools: [
+  { id: 'channels', label: 'Parallel Channel', icon: AlignCenterVertical, tools: [
     ['parallelChannel', AlignCenterVertical, 'Parallel Channel'],
     ['flatTopChannel', ArrowRightToLine, 'Flat Top Channel'],
     ['flatBottomChannel', ArrowRightToLine, 'Flat Bottom Channel'],
@@ -42,7 +51,7 @@ const GROUPS = [
     ['curve', Spline, 'Curve (Bezier)'],
     ['arc', CircleDashed, 'Arc'],
   ] },
-  { id: 'fib', label: 'Fibonacci', icon: TrendingUp, tools: [
+  { id: 'fib', label: 'Fib Retracement', icon: TrendingUp, tools: [
     ['fib', TrendingUp, 'Fib Retracement'],
     ['fibExtension', ArrowRightToLine, 'Fib Extension'],
     ['fibProjection', Crosshair, 'Fib Projection'],
@@ -50,99 +59,274 @@ const GROUPS = [
     ['fibChannel', AlignCenterVertical, 'Fib Channel'],
     ['fibSpiral', RotateCw, 'Fib Spiral'],
     ['fibTimeZone', ArrowUpDown, 'Fib Time Zone'],
+    ['trendFib', TrendingDown, 'Trend Fib'],
   ] },
   { id: 'measure', label: 'Measure', icon: Ruler, tools: [['measure', Ruler, 'Measure']] },
-  { id: 'textarrow', label: 'Text / Arrow / Marks', icon: Type, tools: [
-    ['text', Type, 'Text Note'],
+  { id: 'position', label: 'Long Position', icon: TrendingUp, tools: [
+    ['longPosition', TrendingUp, 'Long Position'],
+    ['shortPosition', TrendingDown, 'Short Position'],
+    ['riskReward', Scale, 'Risk / Reward'],
+    ['fixedRisk', Gauge, 'Fixed Risk'],
+    ['fixedReward', BadgeDollarSign, 'Fixed Reward'],
+    ['customPosition', SlidersHorizontal, 'Custom Position'],
+  ] },
+  { id: 'annotations', label: 'Text', icon: Type, tools: [
+    ['text', Type, 'Text'],
+    ['anchoredText', Pin, 'Anchored Text'],
+    ['note', StickyNote, 'Note'],
+    ['callout', MessageSquare, 'Callout'],
+    ['arrowCallout', MessageSquareText, 'Arrow Callout'],
+    ['balloon', MessageCircle, 'Balloon'],
+    ['infoBox', Info, 'Info Box'],
+    ['label', Tag, 'Label'],
+    ['priceLabel', BadgeDollarSign, 'Price Label'],
+    ['timeLabel', Clock, 'Time Label'],
+  ] },
+  { id: 'textarrow', label: 'Arrow', icon: ArrowRight, tools: [
     ['arrow', ArrowRight, 'Arrow'],
     ['arrowMarkUp', ArrowUp, 'Arrow Mark Up'],
     ['arrowMarkDown', ArrowDown, 'Arrow Mark Down'],
+    ['doubleArrow', ArrowUpDown, 'Double Arrow'],
     ['infoLine', Info, 'Info Line'],
   ] },
 ];
 
-const SNAP_MODES = [['ohlc', 'OHLC'], ['open', 'Open'], ['high', 'High'], ['low', 'Low'], ['close', 'Close']];
+const TOOL_INDEX = new Map(GROUPS.flatMap((group) => group.tools.map(([id, icon, label]) => [id, { icon, label }])));
 
-export default function LeftToolbar({ tool, setTool, visible, setVisible, onClear, snap, setSnap }) {
-  const [open, setOpen] = useState(null);
-  const [snapOpen, setSnapOpen] = useState(false);
+export default function LeftToolbar({ tool, setTool, visible, setVisible, onClear }) {
+  const [openGroup, setOpenGroup] = useState(null);
+  const [favorites, setFavorites] = useState(() => loadManagerState().favorites);
   const barRef = useRef(null);
+  const flyoutRef = useRef(null);
+  const longPressTimer = useRef(null);
+  const [flyoutPos, setFlyoutPos] = useState({ top: 0 });
+
+  const closeFlyout = useCallback(() => {
+    setOpenGroup(null);
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+  }, []);
 
   useEffect(() => {
-    if (!open && !snapOpen) return;
-    const away = (event) => { if (barRef.current && !barRef.current.contains(event.target)) { setOpen(null); setSnapOpen(false); } };
-    const esc = (event) => { if (event.key === 'Escape') { setOpen(null); setSnapOpen(false); } };
+    if (!openGroup) return;
+    const away = (e) => {
+      if (barRef.current && !barRef.current.contains(e.target) && flyoutRef.current && !flyoutRef.current.contains(e.target)) {
+        closeFlyout();
+      }
+    };
+    const esc = (e) => { if (e.key === 'Escape') closeFlyout(); };
     document.addEventListener('mousedown', away);
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
-  }, [open, snapOpen]);
+  }, [openGroup, closeFlyout]);
+
+  const handleGroupClick = (group, buttonEl) => {
+    const defaultId = group.tools[0][0];
+    if (group.id === 'cursor' || group.tools.length === 1) {
+      setTool(defaultId);
+      return;
+    }
+    if (openGroup === group.id) {
+      closeFlyout();
+    } else {
+      const rect = buttonEl.getBoundingClientRect();
+      setFlyoutPos({ top: rect.top });
+      setOpenGroup(group.id);
+    }
+  };
+
+  const handleGroupDoubleClick = (group) => {
+    if (group.id === 'cursor' || group.tools.length <= 1) return;
+    const defaultId = group.tools[0][0];
+    setTool(defaultId);
+  };
+
+  const handleToolSelect = (id) => {
+    setTool(id);
+    closeFlyout();
+  };
 
   const groupActive = (group) => group.tools.some(([id]) => id === tool);
+  const favoriteTools = favorites.map((id) => { const entry = TOOL_INDEX.get(id); return entry ? [id, entry.icon, entry.label] : null; }).filter(Boolean);
+  const toggleStar = (id) => { setFavorites(toggleFavorite(id)); };
+  const groups = favoriteTools.length
+    ? [{ id: 'favorites', label: 'Favorites', icon: Star, tools: favoriteTools }, ...GROUPS]
+    : GROUPS;
 
   return (
-    <div ref={barRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 7px', borderRight: '1px solid var(--line)' }}>
-      {GROUPS.map((group) => {
-        const [defaultId, , defaultLabel] = group.tools[0];
-        const active = groupActive(group);
-        const Icon = group.icon;
+    <>
+      <div ref={barRef} className="td-toolbar" style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
+        padding: '8px 4px',
+        width: '100%',
+        height: '100%',
+      }}>
+        {groups.map((group) => {
+          const active = groupActive(group);
+          const Icon = group.icon;
+          const hasChildren = group.id !== 'cursor' && group.tools.length > 1;
+          return (
+            <div key={group.id} style={{ position: 'relative' }}>
+              <button
+                title={group.label}
+                onClick={(e) => handleGroupClick(group, e.currentTarget)}
+                onDoubleClick={() => handleGroupDoubleClick(group)}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 4,
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: active ? 'rgba(41,98,255,0.12)' : 'transparent',
+                  color: active ? 'var(--accent)' : 'var(--muted)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'background 0.1s',
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = openGroup === group.id ? 'rgba(0,0,0,0.06)' : 'transparent'; }}
+              >
+                <Icon size={18} strokeWidth={1.8} />
+                {hasChildren && (
+                  <span style={{
+                    position: 'absolute',
+                    bottom: 3,
+                    right: 3,
+                    width: 0,
+                    height: 0,
+                    borderLeft: '3px solid transparent',
+                    borderRight: '3px solid transparent',
+                    borderBottom: `3px solid ${active ? 'var(--accent)' : 'var(--dim)'}`,
+                  }} />
+                )}
+              </button>
+            </div>
+          );
+        })}
+
+        <div style={{ width: 24, height: 1, background: 'var(--border)', margin: '6px 0' }} />
+
+        <button
+          title={visible ? 'Hide drawings' : 'Show drawings'}
+          onClick={() => setVisible(!visible)}
+          style={{
+            width: 40, height: 40, borderRadius: 4,
+            display: 'grid', placeItems: 'center',
+            color: visible ? 'var(--accent)' : 'var(--muted)',
+            background: visible ? 'rgba(41,98,255,0.12)' : 'transparent',
+            border: 'none', cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = visible ? 'rgba(41,98,255,0.12)' : 'transparent'; }}
+        >
+          {visible ? <Eye size={18} strokeWidth={1.8} /> : <EyeOff size={18} strokeWidth={1.8} />}
+        </button>
+        <button
+          title="Remove all drawing tools"
+          onClick={onClear}
+          style={{
+            width: 40, height: 40, borderRadius: 4,
+            display: 'grid', placeItems: 'center',
+            color: 'var(--muted)',
+            background: 'transparent',
+            border: 'none', cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,83,80,0.08)'; e.currentTarget.style.color = 'var(--red)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--muted)'; }}
+        >
+          <Trash2 size={18} strokeWidth={1.8} />
+        </button>
+      </div>
+
+      {openGroup && (() => {
+        const group = groups.find((g) => g.id === openGroup);
+        if (!group) return null;
         return (
-          <div key={group.id} style={{ position: 'relative' }}>
-            <button
-              title={group.label}
-              onClick={() => { setTool(defaultId); setOpen((current) => (current === group.id ? null : group.id)); }}
-              style={{ width: 30, height: 30, borderRadius: 8, display: 'grid', placeItems: 'center', background: active ? 'rgba(77,124,254,.18)' : 'transparent', color: active ? 'var(--blue)' : 'var(--muted)' }}
-            >
-              <Icon size={15} />
-            </button>
-            {open === group.id && group.id !== 'cursor' && (
-              <div style={{ position: 'absolute', left: 38, top: 0, width: 184, zIndex: 90, background: 'var(--card2)', border: '1px solid var(--line2)', borderRadius: 10, boxShadow: '0 16px 40px rgba(0,0,0,.5)', overflow: 'hidden' }}>
-                <div style={{ padding: '8px 12px', fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--dim)', borderBottom: '1px solid var(--line)' }}>{group.label}</div>
-                {group.tools.map(([id, ToolIcon, label]) => {
-                  const on = id === tool;
-                  return (
-                    <button
-                      key={id}
-                      title={label}
-                      onClick={() => { setTool(id); setOpen(null); }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left',
-                        padding: '9px 12px', fontSize: 13, borderBottom: '1px solid var(--line)',
-                        color: on ? 'var(--text)' : 'var(--muted)',
-                        background: on ? 'rgba(77,124,254,.10)' : 'transparent',
-                      }}
-                    >
-                      <span style={{ width: 14, display: 'grid', placeItems: 'center' }}>
-                        {on && <Check size={13} color="var(--blue)" />}
+          <div
+            ref={flyoutRef}
+            style={{
+              position: 'fixed',
+              left: 58,
+              top: flyoutPos.top,
+              width: 200,
+              zIndex: 200,
+              background: '#ffffff',
+              border: '1px solid #e0e3eb',
+              borderRadius: 6,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.05)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div style={{
+              padding: '6px 12px 4px',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: '#b2b5be',
+              fontFamily: 'Inter, sans-serif',
+              borderBottom: '1px solid #f0f1f5',
+              flexShrink: 0,
+            }}>
+              {group.label}
+            </div>
+            <div className="terminal-scroll" style={{ maxHeight: 300, overflowY: 'auto', overflowX: 'hidden', padding: '4px 0' }}>
+              {group.tools.map(([id, ToolIcon, label]) => {
+                const on = id === tool;
+                const starred = favorites.includes(id);
+                return (
+                  <button
+                    key={id}
+                    onClick={() => handleToolSelect(id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '7px 12px',
+                      fontSize: 12,
+                      fontFamily: 'Inter, sans-serif',
+                      color: on ? '#ffffff' : '#222222',
+                      background: on ? 'var(--accent)' : 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'background 0.08s',
+                    }}
+                    onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = 'rgba(41,98,255,0.06)'; }}
+                    onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <span style={{ width: 16, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <ToolIcon size={14} strokeWidth={1.8} />
+                    </span>
+                    <span style={{ flex: 1 }}>{label}</span>
+                    {group.id !== 'favorites' && (
+                      <span
+                        title="Add to favorites"
+                        onClick={(e) => { e.stopPropagation(); toggleStar(id); }}
+                        style={{
+                          color: starred ? '#F5B93E' : '#b2b5be',
+                          cursor: 'pointer',
+                          display: 'grid',
+                          placeItems: 'center',
+                          padding: 2,
+                        }}
+                      >
+                        <Star size={10} fill={starred ? 'currentColor' : 'none'} />
                       </span>
-                      <ToolIcon size={14} />
-                      <span style={{ flex: 1 }}>{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         );
-      })}
-      <div style={{ width: 20, height: 1, background: 'var(--line)', margin: '4px 0' }} />
-      <div style={{ position: 'relative' }}>
-        <button title={snap?.magnet ? 'Snap: ' + (SNAP_MODES.find(([m]) => m === snap.mode)?.[1] || 'OHLC') + ' (click to toggle)' : 'Snap off (click to toggle)'} onClick={() => setSnap({ ...snap, magnet: !snap?.magnet })} style={{ width: 30, height: 30, color: snap?.magnet ? 'var(--blue)' : 'var(--dim)', opacity: snap?.magnet ? 1 : .5 }}><Magnet size={15} /></button>
-        <button title="Snap mode" onClick={() => setSnapOpen(!snapOpen)} style={{ width: 30, height: 30, color: 'var(--muted)' }}><Crosshair size={15} /></button>
-        {snapOpen && (
-          <div style={{ position: 'absolute', left: 38, top: 0, width: 140, zIndex: 90, background: 'var(--card2)', border: '1px solid var(--line2)', borderRadius: 10, boxShadow: '0 16px 40px rgba(0,0,0,.5)', overflow: 'hidden' }}>
-            <div style={{ padding: '8px 12px', fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--dim)', borderBottom: '1px solid var(--line)' }}>Snap to</div>
-            {SNAP_MODES.map(([mode, label]) => (
-              <button key={mode} onClick={() => { setSnap({ ...snap, mode }); setSnapOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12.5, borderBottom: '1px solid var(--line)', color: snap?.mode === mode ? 'var(--text)' : 'var(--muted)', background: snap?.mode === mode ? 'rgba(77,124,254,.10)' : 'transparent' }}>
-                <span style={{ width: 14, display: 'grid', placeItems: 'center' }}>{snap?.mode === mode && <Check size={13} color="var(--blue)" />}</span>
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div style={{ width: 20, height: 1, background: 'var(--line)', margin: '4px 0' }} />
-      <button title="Toggle drawings" onClick={() => setVisible(!visible)} style={{ width: 30, height: 30, color: 'var(--muted)' }}>{visible ? <Eye size={15} /> : <EyeOff size={15} />}</button>
-      <button title="Clear drawings" onClick={onClear} style={{ width: 30, height: 30, color: 'var(--red)' }}><Trash2 size={15} /></button>
-    </div>
+      })()}
+    </>
   );
 }

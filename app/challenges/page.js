@@ -22,6 +22,24 @@ export default function Challenges() {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [coupon, setCoupon] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponErr, setCouponErr] = useState('');
+
+  async function applyCoupon() {
+    const trimmed = coupon.trim().toUpperCase();
+    if (!trimmed) return;
+    setCouponErr('');
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('code', trimmed)
+      .eq('active', true)
+      .maybeSingle();
+    if (error || !data) return setCouponErr('Invalid or inactive code.');
+    if (data.expires_at && new Date(data.expires_at) < new Date()) return setCouponErr('This code has expired.');
+    setAppliedCoupon(data);
+  }
 
   useEffect(() => {
     supabase.from('plans').select('*').eq('active', true).then(({ data, error }) => {
@@ -34,6 +52,8 @@ export default function Challenges() {
 
   const s = SIZES[size];
   const fee = step === '2step' ? s.fee2 : s.fee1;
+  const discount = appliedCoupon ? Math.round(fee * appliedCoupon.discount_percent / 100) : 0;
+  const discountedFee = fee - discount;
   const t1 = step === '2step' ? 8 : 10;
 
   // find the real database row matching this capital (needed for the order's foreign key)
@@ -50,7 +70,9 @@ export default function Challenges() {
       plan_id: dbMatch.id,
       utr: utr.trim(),
       eval_type: step,
-      fee_amount: fee,
+      fee_amount: discountedFee,
+      coupon_code: appliedCoupon?.code || null,
+      discount_percent: appliedCoupon?.discount_percent || null,
     });
     setBusy(false);
     if (error) return setErr(error.message);
@@ -126,11 +148,32 @@ export default function Challenges() {
               </table>
             </div>
 
+            <div className="card" style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
+                <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Coupon code (optional)</label>
+                  <input value={coupon} onChange={(e) => { setCoupon(e.target.value); setCouponErr(''); }}
+                    placeholder="e.g. WELCOME10" style={{ textTransform: 'uppercase' }} />
+                </div>
+                <button className="btn btn-line btn-sm" style={{ height: 36 }} onClick={applyCoupon} disabled={!coupon.trim() || busy}>
+                  Apply
+                </button>
+              </div>
+              {couponErr && <div className="err" style={{ marginTop: 8, fontSize: 12.5 }}>{couponErr}</div>}
+              {appliedCoupon && (
+                <div className="ok" style={{ marginTop: 8, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>✓ {appliedCoupon.discount_percent}% off applied</span>
+                  <button onClick={() => { setAppliedCoupon(null); setCoupon(''); }} className="btn btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}>Remove</button>
+                </div>
+              )}
+            </div>
+
             <div className="card">
               <h3 style={{ fontSize: 18, marginBottom: 6 }}>Payment</h3>
               <p style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 18 }}>
-                Scan the QR, pay <b className="num" style={{ color: 'var(--text)' }}>{inr(fee)}</b>, then enter your
+                Scan the QR, pay <b className="num" style={{ color: 'var(--text)' }}>{inr(discountedFee)}</b>, then enter your
                 UTR / reference number below. Your account activates after verification.
+                {appliedCoupon && <span className="muted" style={{ display: 'block', marginTop: 4 }}>Fee: <span style={{ textDecoration: 'line-through', opacity: .6 }}>{inr(fee)}</span> → <span className="num" style={{ color: 'var(--green)' }}>-{inr(discount)}</span> with {appliedCoupon.code}</span>}
               </p>
               <div style={{
                 width: 180, height: 180, borderRadius: 14, margin: '0 auto 18px',

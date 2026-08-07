@@ -9,12 +9,20 @@
 // move (drag body/handle), resize h/v/diag (one-anchor and corner handles),
 // rotate (rotation handle, custom SVG cursor), text (text tool), pointer
 // (clickable), default (idle).
+
+const TEXT_TOOLS = new Set(['text', 'anchoredText', 'note', 'callout', 'arrowCallout', 'balloon', 'infoBox', 'label', 'priceLabel', 'timeLabel']);
+const BRUSH_TOOLS = new Set(['brush', 'highlighter', 'eraser']);
+
 const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><circle cx='12' cy='12' r='8.5' fill='none' stroke='#ffffff' stroke-width='2.2'/><circle cx='12' cy='12' r='7' fill='none' stroke='#4d7cfe' stroke-width='1.4'/><path d='M12 1.8 L14.6 5 L9.4 5 Z' fill='#4d7cfe'/><path d='M12 22.2 L9.4 19 L14.6 19 Z' fill='#4d7cfe'/></svg>")} 12 12, grab`;
+
+const BRUSH_CURSOR = `url("data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'><circle cx='10' cy='10' r='8' fill='none' stroke='#4F8DFF' stroke-width='1.5'/><circle cx='10' cy='10' r='1.5' fill='#4F8DFF'/></svg>")} 10 10, crosshair`;
 
 export function resolveCursor({ tool, hover, panning = false, axisHover = null }) {
   if (panning) return 'grabbing';
   if (axisHover === 'price') return 'ns-resize';
   if (axisHover === 'time') return 'ew-resize';
+  if (TEXT_TOOLS.has(tool)) return 'text';
+  if (BRUSH_TOOLS.has(tool)) return BRUSH_CURSOR;
   if (tool !== 'cursor') return 'crosshair';
   if (!hover) return 'grab';
   if (hover.kind === 'rotation') return ROTATE_CURSOR;

@@ -11,7 +11,7 @@ import {
 
 const MAIN_LINKS = [
   ['/portal', Home, 'Home'],
-  ['/portal/terminal', LineChart, 'Web Terminal'],
+  ['/web-terminal', LineChart, 'Web Terminal'],
   ['/portal/accounts', Users, 'Accounts'],
   ['/portal/payouts', Wallet, 'Payouts'],
   ['/portal/leaderboard', Trophy, 'Leaderboard'],
@@ -54,6 +54,8 @@ export default function PortalLayout({ children }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(path?.startsWith('/portal/analytics'));
 
+  const isTerminal = path === '/portal/terminal';
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { window.location.href = '/login'; return; }
@@ -75,6 +77,19 @@ export default function PortalLayout({ children }) {
       sessionStorage.clear();
     } catch (e) {}
     setTimeout(() => window.location.replace('/'), 100);
+  }
+
+  // Terminal page: standalone full-viewport, no dashboard chrome
+  if (isTerminal) {
+    if (!ready) return (
+      <div style={{ width: '100vw', height: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--grad)', margin: '0 auto 14px' }} />
+          <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>Loading terminal…</p>
+        </div>
+      </div>
+    );
+    return <>{children}</>;
   }
 
   if (!ready) {
@@ -194,15 +209,14 @@ export default function PortalLayout({ children }) {
             {analyticsOpen && (
               <div style={{ paddingLeft: 14, borderLeft: '1px dashed var(--line2)', marginLeft: 18, marginBottom: 4 }}>
                 {ANALYTICS_LINKS.map(([href, Icon, label]) => (
-                  <NavItem key={href} href={href} Icon={Icon} label={label} on={path === href} soon />
+                  <NavItem key={href} href={href} Icon={Icon} label={label} on={path === href} />
                 ))}
               </div>
             )}
 
             <div className="dim" style={{ fontSize: 10, letterSpacing: '.1em', margin: '16px 10px 6px', fontWeight: 700 }}>OTHER</div>
             {OTHER_LINKS.map(([href, Icon, label]) => (
-              <NavItem key={href} href={href} Icon={Icon} label={label} on={path === href}
-                soon={['/portal/affiliate', '/portal/support', '/portal/coupons', '/portal/privacy'].includes(href)} />
+              <NavItem key={href} href={href} Icon={Icon} label={label} on={path === href} />
             ))}
           </div>
 

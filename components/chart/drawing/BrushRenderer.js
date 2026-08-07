@@ -17,6 +17,7 @@
 import { taperRibbon } from './BrushGeometry';
 import { arcThrough, arcPoint } from './BezierGeometry';
 import { smoothPath } from './StrokeSmoother';
+import { themeTokens } from '../engine/ThemeManager';
 
 // Component wrapper matching the other render threads' shape: strokes render
 // on their own layer, ahead of the generic DrawingRenderer.
@@ -35,7 +36,8 @@ export function renderBrushStroke(ctx, drawing, transform, revision = 0) {
   if (n < 2) return;
   const type = drawing.drawingType;
   const style = drawing.style || {};
-  const color = style.color || (type === 'highlighter' ? '#eab308' : type === 'eraser' ? '#ef4444' : '#f5b93e');
+  const theme = themeTokens();
+  const color = style.color || (type === 'highlighter' ? theme.gold : type === 'eraser' ? 'rgba(239,68,68,.9)' : theme.gold);
   const brush = drawing.brush || {};
   const baseWidth = (style.lineWidth || (type === 'highlighter' ? 14 : type === 'eraser' ? 18 : 3));
 
@@ -47,7 +49,7 @@ export function renderBrushStroke(ctx, drawing, transform, revision = 0) {
     ctx.setLineDash(style.dash ? [6, 4] : []);
     ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p3.x, p3.y); ctx.stroke();
     if (style.showControl !== false && drawing.selected) {
-      ctx.setLineDash([2, 3]); ctx.strokeStyle = 'rgba(77,124,254,.55)'; ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]); ctx.strokeStyle = theme.alpha(theme.accent, 0.55); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(c1.x, c1.y); ctx.moveTo(p3.x, p3.y); ctx.lineTo(c2.x, c2.y); ctx.stroke();
     }
     return;

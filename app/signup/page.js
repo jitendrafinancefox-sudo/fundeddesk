@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -10,12 +10,17 @@ export default function Signup() {
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ref, setRef] = useState('');
+
+  useEffect(() => {
+    setRef(new URLSearchParams(window.location.search).get('ref') || '');
+  }, []);
 
   async function submit() {
     setErr(''); setOk(''); setBusy(true);
     const { error } = await supabase.auth.signUp({
       email, password: pass,
-      options: { data: { full_name: name } },
+      options: { data: { full_name: name, ref_code: ref } },
     });
     setBusy(false);
     if (error) return setErr(error.message);

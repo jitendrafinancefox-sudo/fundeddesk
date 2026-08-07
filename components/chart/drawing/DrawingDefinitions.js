@@ -21,9 +21,20 @@ import { fibHitTest } from './FibHitTester';
 import { renderBrushStroke } from './BrushRenderer';
 import { strokeFamilyHit } from './PathHitTester';
 import { isStrokeType, isFreehandType, isClickPlaceType } from './BrushGeometry';
+import { renderPosition } from './PositionRenderer';
+import { positionHit } from './PositionHitTester';
+import { isPositionType, positionColorFor } from './PositionGeometry';
+import { renderText } from './TextRenderer';
+import { renderLabel } from './LabelRenderer';
+import { textHit, labelHit } from './TextHitTester';
+import { isTextType, isLabelType, textColorFor } from './TextGeometry';
+import { themeTokens } from '../engine/ThemeManager';
 export { isChannelType } from './ChannelGeometry';
 export { isFibType };
 export { isStrokeType, isFreehandType, isClickPlaceType };
+export { isPositionType };
+export { positionColorFor };
+export { isTextType, isLabelType, textColorFor };
 
 const fmtPrice = (price) => price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -33,9 +44,12 @@ const polygon = (ctx, points, close = true) => { ctx.beginPath(); points.forEach
 
 export const ZONE_TYPES = ['supplyZone', 'demandZone', 'smcZone', 'premiumDiscountZone'];
 export const isZoneType = (drawingType) => ZONE_TYPES.includes(drawingType);
-export const zoneColorFor = (drawingType) => ({
-  supplyZone: '#ef4444', demandZone: '#22c55e', smcZone: '#4d7cfe', premiumDiscountZone: '#eab308',
-}[drawingType] || '#4d7cfe');
+export const zoneColorFor = (drawingType) => {
+  const t = themeTokens();
+  return ({
+    supplyZone: t.red, demandZone: t.green, smcZone: t.accent, premiumDiscountZone: t.gold,
+  }[drawingType] || t.accent);
+};
 
 export const DRAWING_DEFINITIONS = {
   trend: { label: 'Trend Line', anchorCount: 2, render: segment },
@@ -67,7 +81,7 @@ export const DRAWING_DEFINITIONS = {
       ctx.font = '600 9.5px Inter, sans-serif';
       ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
       const width = ctx.measureText(text).width + 12;
-      ctx.fillStyle = 'rgba(12,18,28,.92)';
+      ctx.fillStyle = themeTokens().alpha(themeTokens().card, 0.92);
       ctx.fillRect(4, a.y - 9, width, 17);
       ctx.fillStyle = ctx.strokeStyle;
       ctx.fillText(text, 10, a.y + 0.5);
@@ -195,10 +209,89 @@ export const DRAWING_DEFINITIONS = {
     anchorCount: 2,
     render: (ctx, a, b) => { const t = 10000; ctx.beginPath(); ctx.moveTo(a.x - (b.x - a.x) * t, a.y - (b.y - a.y) * t); ctx.lineTo(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t); ctx.stroke(); },
   },
-  text: {
-    label: 'Text Note',
+  crossline: {
+    label: 'Cross Line',
     anchorCount: 1,
-    render: (ctx, a, drawing) => ctx.fillText(drawing.text || 'Note', a.x, a.y),
+    render: (ctx, a) => { ctx.beginPath(); ctx.moveTo(a.x, 0); ctx.lineTo(a.x, ctx.canvas.height); ctx.moveTo(0, a.y); ctx.lineTo(ctx.canvas.width, a.y); ctx.stroke(); },
+    hitTest: (drawing, point, transform, threshold) => { const a = transform.anchorToPixel(drawing.anchorPoints[0]); return Boolean(a) && (Math.abs(point.x - a.x) <= threshold || Math.abs(point.y - a.y) <= threshold); },
+  },
+  doubleArrow: {
+    label: 'Double Arrow',
+    anchorCount: 2,
+    render: (ctx, a, b) => {
+      segment(ctx, a, b);
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.x - 10 * Math.cos(angle - 0.45), b.y - 10 * Math.sin(angle - 0.45));
+      ctx.lineTo(b.x - 10 * Math.cos(angle + 0.45), b.y - 10 * Math.sin(angle + 0.45));
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(a.x + 10 * Math.cos(angle - 0.45), a.y + 10 * Math.sin(angle - 0.45));
+      ctx.lineTo(a.x + 10 * Math.cos(angle + 0.45), a.y + 10 * Math.sin(angle + 0.45));
+      ctx.closePath(); ctx.fill();
+    },
+  },
+  text: {
+    label: 'Text',
+    anchorCount: 1, text: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => renderText(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => textHit(drawing, point, transform, threshold),
+  },
+  anchoredText: {
+    label: 'Anchored Text',
+    anchorCount: 1, text: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => renderText(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => textHit(drawing, point, transform, threshold),
+  },
+  note: {
+    label: 'Note',
+    anchorCount: 1, text: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => renderText(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => textHit(drawing, point, transform, threshold),
+  },
+  callout: {
+    label: 'Callout',
+    anchorCount: 1, text: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => renderText(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => textHit(drawing, point, transform, threshold),
+  },
+  arrowCallout: {
+    label: 'Arrow Callout',
+    anchorCount: 1, text: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => renderText(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => textHit(drawing, point, transform, threshold),
+  },
+  balloon: {
+    label: 'Balloon',
+    anchorCount: 1, text: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => renderText(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => textHit(drawing, point, transform, threshold),
+  },
+  infoBox: {
+    label: 'Info Box',
+    anchorCount: 1, text: true, rotatable: true,
+    render: (ctx, a, b, drawing, transform) => renderText(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => textHit(drawing, point, transform, threshold),
+  },
+  label: {
+    label: 'Label',
+    anchorCount: 1, text: true, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => renderLabel(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => labelHit(drawing, point, transform, threshold),
+  },
+  priceLabel: {
+    label: 'Price Label',
+    anchorCount: 1, text: true, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => renderLabel(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => labelHit(drawing, point, transform, threshold),
+  },
+  timeLabel: {
+    label: 'Time Label',
+    anchorCount: 1, text: true, rotatable: false,
+    render: (ctx, a, b, drawing, transform) => renderLabel(ctx, drawing, transform),
+    hitTest: (drawing, point, transform, threshold) => labelHit(drawing, point, transform, threshold),
   },
   arrow: {
     label: 'Arrow',
@@ -251,7 +344,7 @@ export const DRAWING_DEFINITIONS = {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const textWidth = ctx.measureText(text).width;
       const mx = (a.x + b.x) / 2; const my = (a.y + b.y) / 2;
-      ctx.fillStyle = 'rgba(12,18,28,.85)';
+      ctx.fillStyle = themeTokens().alpha(themeTokens().card, 0.85);
       ctx.fillRect(mx - textWidth / 2 - 5, my - 8, textWidth + 10, 16);
       ctx.fillStyle = ctx.strokeStyle;
       ctx.fillText(text, mx, my);
@@ -264,6 +357,7 @@ export const DRAWING_DEFINITIONS = {
   fibChannel: { label: 'Fib Channel', anchorCount: 3, fib: true, rotatable: true, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
   fibSpiral: { label: 'Fib Spiral', anchorCount: 2, fib: true, rotatable: true, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
   fibTimeZone: { label: 'Fib Time Zone', anchorCount: 2, fib: true, rotatable: false, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
+  trendFib: { label: 'Trend Fib', anchorCount: 2, fib: true, rotatable: false, render: (ctx, a, b, drawing, transform) => renderFib(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => fibHitTest(drawing, point, transform, threshold) },
   brush: { label: 'Brush', anchorCount: 2, continuous: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
   highlighter: { label: 'Highlighter', anchorCount: 2, continuous: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
   eraser: { label: 'Eraser', anchorCount: 2, continuous: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
@@ -271,6 +365,12 @@ export const DRAWING_DEFINITIONS = {
   polyline: { label: 'Polyline', anchorCount: 0, clickPlace: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
   curve: { label: 'Curve (Bezier)', anchorCount: 4, clickPlace: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
   arc: { label: 'Arc', anchorCount: 3, clickPlace: true, stroke: true, render: (ctx, a, b, drawing, transform) => renderBrushStroke(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => strokeFamilyHit(drawing, point, transform, threshold) },
+  longPosition: { label: 'Long Position', anchorCount: 3, position: true, rotatable: false, color: positionColorFor('longPosition'), render: (ctx, a, b, drawing, transform) => renderPosition(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => positionHit(drawing, point, transform, threshold) },
+  shortPosition: { label: 'Short Position', anchorCount: 3, position: true, rotatable: false, color: positionColorFor('shortPosition'), render: (ctx, a, b, drawing, transform) => renderPosition(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => positionHit(drawing, point, transform, threshold) },
+  riskReward: { label: 'Risk / Reward', anchorCount: 3, position: true, rotatable: false, color: positionColorFor('riskReward'), render: (ctx, a, b, drawing, transform) => renderPosition(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => positionHit(drawing, point, transform, threshold) },
+  fixedRisk: { label: 'Fixed Risk', anchorCount: 3, position: true, rotatable: false, color: positionColorFor('fixedRisk'), render: (ctx, a, b, drawing, transform) => renderPosition(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => positionHit(drawing, point, transform, threshold) },
+  fixedReward: { label: 'Fixed Reward', anchorCount: 3, position: true, rotatable: false, color: positionColorFor('fixedReward'), render: (ctx, a, b, drawing, transform) => renderPosition(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => positionHit(drawing, point, transform, threshold) },
+  customPosition: { label: 'Custom Position', anchorCount: 3, position: true, rotatable: false, color: positionColorFor('customPosition'), render: (ctx, a, b, drawing, transform) => renderPosition(ctx, drawing, transform), hitTest: (drawing, point, transform, threshold) => positionHit(drawing, point, transform, threshold) },
 };
 
 // Zone band rendering: translucent fill + top/bottom borders + labels.
@@ -315,7 +415,7 @@ function renderZone(ctx, drawing, transform) {
     const t2 = drawing.anchorPoints[1]?.time ?? t1;
     ctx.font = '10px Inter, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
     const label = `${new Date(Math.min(t1, t2) * 1000).toLocaleDateString('en-IN')} – ${new Date(Math.max(t1, t2) * 1000).toLocaleDateString('en-IN')}`;
-    ctx.fillStyle = 'rgba(12,18,28,.85)';
+    ctx.fillStyle = themeTokens().alpha(themeTokens().card, 0.85);
     const width = ctx.measureText(label).width;
     ctx.fillRect(right - width - 12, bottom + 2, width + 10, 16);
     ctx.fillStyle = color;
@@ -343,7 +443,7 @@ function renderChannel(ctx, drawing, transform) {
   const geo = channelGeometry(drawing, transform);
   if (!geo) return;
   const style = drawing.style || {};
-  const color = style.color || '#4d7cfe';
+  const color = style.color || themeTokens().accent;
   const lineWidth = style.lineWidth || 1.5;
   const dash = style.dash ? [6, 4] : [];
   const extendLeft = style.extendLeft !== false;

@@ -44,7 +44,7 @@ export default function ThemeToggle() {
         position: 'fixed', top: 78, right: 22, zIndex: 9999,
         width: 46, height: 46, borderRadius: '50%',
         border: '1px solid var(--line2)', background: 'var(--card)',
-        backdropFilter: 'blur(10px)', boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+        backdropFilter: 'blur(10px)', boxShadow: '0 8px 24px rgba(0,0,0,.15)',
         display: 'grid', placeItems: 'center', cursor: 'pointer',
         color: dark ? 'var(--muted)' : 'var(--gold)', transition: 'transform .15s',
       }}

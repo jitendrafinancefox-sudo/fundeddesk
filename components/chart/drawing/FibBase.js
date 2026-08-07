@@ -27,6 +27,7 @@ export const FIB_TOOLS = [
   { id: 'fibChannel', label: 'Fib Channel', anchors: 3, rotatable: true },
   { id: 'fibSpiral', label: 'Fib Spiral', anchors: 2, rotatable: true },
   { id: 'fibTimeZone', label: 'Fib Time Zone', anchors: 2, rotatable: false },
+  { id: 'trendFib', label: 'Trend Fib', anchors: 2, rotatable: false },
 ];
 
 export const FIB_TYPES = FIB_TOOLS.map((tool) => tool.id);

@@ -6,7 +6,24 @@ import { isFibType } from './FibGeometry';
 import { sanitizeFib } from './FibSerializer';
 import { isStrokeType } from './BrushGeometry';
 import { sanitizeStroke } from './BrushSerializer';
+import { isPositionType } from './PositionGeometry';
+import { sanitizePosition } from './PositionSerializer';
+import { isTextType } from './TextGeometry';
+import { sanitizeText } from './TextSerializer';
 
+// v8: group membership — object-tree groups are stored on the members as
+// drawing.groupId + drawing.groupName (both clamped); grouping, renaming and
+// ungrouping flow through the same sanitized envelope as everything else.
+// v7: text-tool drawings (text/anchoredText/note/callout/arrowCallout/
+// balloon/infoBox/label/priceLabel/timeLabel) carry a text payload
+// { content, box, autoSize, rotation, font, boxStyle, side, pointer,
+//   snapToCandle } describing content and styling; labels add auto-position
+// and candle snapping. The box is stored in screen px so annotations keep a
+// constant size during zoom (the anchor stays data-pinned).
+// v6: position-tool drawings (long/short/risk-reward/fixed-risk/fixed-
+// reward/custom) carry a position payload { lots, account, currency,
+// pipSize, fixedRisk, fixedReward } with user-entered sizing fields;
+// derived risk/reward numbers are recomputed, never persisted.
 // v5: stroke-family drawings (brush/highlighter/eraser/path/polyline/curve/
 // arc) carry a brush payload { taper, raw, smooth } and curve control
 // points; anchor arrays are capped for the storage envelope.
@@ -19,10 +36,11 @@ import { sanitizeStroke } from './BrushSerializer';
 // v2: shapes are stored as full corner anchors (TL/TR/BR/BL) instead of
 // 2-point drag diagonals; rotated shapes carry the rotation in those anchors.
 // v1 payloads still load — the commit funnel promotes legacy diagonals.
-export const DRAWINGS_VERSION = 5;
+export const DRAWINGS_VERSION = 8;
 const VALID_IDENTITY = (drawing) => drawing && typeof drawing.id === 'string' && typeof drawing.symbol === 'string'
   && typeof drawing.timeframe === 'string' && DRAWING_TYPES.includes(drawing.drawingType)
   && Array.isArray(drawing.anchorPoints) && drawing.anchorPoints.length > 0;
+const str = (value, max = 64) => (typeof value === 'string' ? value.slice(0, max) : undefined);
 
 // Serialization envelope:
 //   { version: 1, drawings: [...] }
@@ -47,6 +65,13 @@ function sanitize(envelope) {
     // Stroke-family tools carry a validated brush payload (v5); anchor
     // arrays are numeric, time-sorted and capped.
     ...(isStrokeType(drawing.drawingType) ? sanitizeStroke(drawing) : {}),
+    // Position tools carry a validated sizing payload (v6).
+    ...(isPositionType(drawing.drawingType) ? sanitizePosition(drawing) : {}),
+    // Text tools carry a validated content/styling payload (v7).
+    ...(isTextType(drawing.drawingType) ? sanitizeText(drawing) : {}),
+    // Object-tree groups ride on the members (v8); both fields are clamped
+    // and dropped when malformed.
+    ...(str(drawing.groupId) ? { groupId: str(drawing.groupId), groupName: str(drawing.groupName) || undefined } : {}),
   }));
 }
 

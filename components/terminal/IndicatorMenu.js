@@ -45,7 +45,7 @@ export default function IndicatorMenu({ active = [], setActive }) {
         <div style={{
           position: 'absolute', right: 0, top: 34, width: 218, zIndex: 80,
           background: 'var(--card2)', border: '1px solid var(--line2)', borderRadius: 10,
-          boxShadow: '0 16px 40px rgba(0,0,0,.5)', overflow: 'hidden',
+          boxShadow: '0 16px 40px rgba(0,0,0,.15)', overflow: 'hidden',
         }}>
           {INDICATORS.map((indicator) => {
             const on = active.includes(indicator.id);

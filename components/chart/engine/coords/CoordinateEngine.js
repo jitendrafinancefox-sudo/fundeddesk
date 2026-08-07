@@ -14,7 +14,7 @@ import { ProjectionService } from './ProjectionService';
 // read `viewport.state.height` / `.barWidth` keep working unchanged. Any
 // mutation bumps `revision`, which invalidates the cached projection.
 export class CoordinateEngine {
-  constructor({ width = 1, height = 1, barWidth = 9, rightOffset = 8, pricePadding = 0.08, log = false } = {}) {
+  constructor({ width = 1, height = 1, barWidth = 7, rightOffset = 2.5, pricePadding = 0.08, log = false } = {}) {
     this.timeScale = new TimeScale({ width, barWidth, rightOffset });
     this.priceScale = new PriceScale({ height, pricePadding, log });
     this.transformer = new ViewportTransformer();
@@ -49,10 +49,20 @@ export class CoordinateEngine {
     this._touch();
   }
   fitPrice(candles) {
+    if (!candles.length || this.priceScale.manual) return;
     const range = this.timeScale.getVisibleRange();
-    const visible = candles.slice(Math.max(0, Math.floor(range.from)), Math.min(candles.length, Math.ceil(range.to) + 1));
-    if (!visible.length) return;
-    const low = Math.min(...visible.map((c) => c.low)); const high = Math.max(...visible.map((c) => c.high));
+    const from = Math.max(0, Math.floor(range.from));
+    const to = Math.min(candles.length - 1, Math.ceil(range.to));
+    const last = candles[to];
+    const cache = this._priceRange;
+    // Window-keyed cache: pan/zoom frames where the integer window doesn't
+    // cross a candle boundary skip the scan entirely; a changed last candle
+    // (live tick) is caught by the fingerprint and rescans just the window.
+    if (cache && cache.candles === candles && cache.from === from && cache.to === to && cache.lastTime === last.time && cache.lastLow === last.low && cache.lastHigh === last.high) return;
+    let low = Infinity; let high = -Infinity;
+    for (let i = from; i <= to; i++) { const c = candles[i]; if (c.low < low) low = c.low; if (c.high > high) high = c.high; }
+    this._priceRange = { candles, from, to, lastTime: last.time, lastLow: last.low, lastHigh: last.high };
+    if (!Number.isFinite(low) || !Number.isFinite(high)) return;
     this.priceScale.fit(low, high);
   }
   dragPriceScale(deltaY) { this.priceScale.dragStretch(deltaY); this._touch(); }

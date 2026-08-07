@@ -14,7 +14,8 @@
 import { polygonCorners, polygonCenter, polygonEdges, polygonRotation, rotatePoint } from '../drawing/ShapeGeometry';
 import { channelGeometry, projectPointOnLine, lineNormal } from '../drawing/ChannelGeometry';
 import { fibHandleGeometry } from '../drawing/FibHitTester';
-import { DRAWING_DEFINITIONS, isFibType, isStrokeType } from '../drawing/DrawingDefinitions';
+import { DRAWING_DEFINITIONS, isFibType, isStrokeType, isPositionType, isTextType } from '../drawing/DrawingDefinitions';
+import { estimateBox } from '../drawing/TextGeometry';
 import { controlHandles, controlMidpoints } from '../drawing/BrushGeometry';
 
 const ROTATABLE_TOOLS = new Set(['trend', 'ray', 'extended', 'measure', 'arrow']);
@@ -50,6 +51,30 @@ export function handleGeometry(drawing, transform, { pointEdit = false } = {}) {
       edges, center,
       rotation: rotatable ? { x: topEdge.mid.x + topEdge.nx * 22, y: topEdge.mid.y + topEdge.ny * 22 } : null,
       rotatable, angle: polygonRotation(corners),
+    };
+  }
+  if (isPositionType(drawing.drawingType)) {
+    // Position tools: entry/SL/TP anchor handles plus a centroid handle that
+    // moves the whole position (anchors keep their prices in market space).
+    const center = anchors.length
+      ? { x: anchors.reduce((sum, p) => sum + p.x, 0) / anchors.length, y: anchors.reduce((sum, p) => sum + p.y, 0) / anchors.length }
+      : null;
+    return { position: true, anchors, center, midpoint: center, rotation: null, rotatable: false };
+  }
+  if (isTextType(drawing.drawingType)) {
+    // Text/label tools: the anchor handle pins the box corner; a size handle
+    // at the opposite corner resizes (labels skip it); the center moves the
+    // whole annotation and a rotation handle rotates the box in screen space.
+    const point = anchors[0] || null;
+    const box = estimateBox(drawing);
+    const center = point ? { x: point.x + box.width / 2, y: point.y + box.height / 2 } : null;
+    const sizeHandle = isTextType(drawing.drawingType) && def.rotatable !== false && point ? { x: point.x + box.width, y: point.y + box.height } : null;
+    return {
+      text: true, anchors, box,
+      size: sizeHandle,
+      center, midpoint: center,
+      rotation: def.rotatable !== false && center ? { x: center.x, y: center.y - 26 } : null,
+      rotatable: def.rotatable !== false,
     };
   }
   const geometry = { anchors, midpoint: null, rotation: null, rotatable: false, channel: false };
@@ -120,6 +145,13 @@ export function nearestHandle(drawing, point, transform, threshold = 9, { pointE
   if (geometry.stroke) {
     if (geometry.insertPoints) geometry.insertPoints.forEach((p) => consider('insert', -1, p.x, p.y, { from: p.from, to: p.to }));
     if (geometry.midpoint) consider('midpoint', -1, geometry.midpoint.x, geometry.midpoint.y);
+    geometry.anchors.forEach((anchor) => consider('anchor', anchor.index, anchor.x, anchor.y));
+    return best;
+  }
+  if (geometry.text) {
+    if (geometry.rotation) consider('rotation', -1, geometry.rotation.x, geometry.rotation.y);
+    if (geometry.size) consider('size', -1, geometry.size.x, geometry.size.y);
+    if (geometry.center) consider('center', -1, geometry.center.x, geometry.center.y);
     geometry.anchors.forEach((anchor) => consider('anchor', anchor.index, anchor.x, anchor.y));
     return best;
   }

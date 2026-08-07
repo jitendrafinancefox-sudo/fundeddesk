@@ -1,5 +1,6 @@
 'use client';
 import { renderDrawing, zoneColorFor } from '../drawing/DrawingDefinitions';
+import { themeTokens } from '../engine/ThemeManager';
 
 // Dedicated pass for zone drawings (supply/demand/SMC/premium-discount).
 // Zones keep their own colors regardless of selection — selection is
@@ -7,6 +8,7 @@ import { renderDrawing, zoneColorFor } from '../drawing/DrawingDefinitions';
 // line/shape thread so drawings stack on top of zones.
 export function ZoneRenderer({ drawings, transform, selectedId, selectedIds, hoverId }) {
   const selectedSet = selectedIds ? new Set(selectedIds) : null;
+  const theme = themeTokens();
   return (ctx) => {
     drawings.forEach((drawing) => {
       const points = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
@@ -20,7 +22,7 @@ export function ZoneRenderer({ drawings, transform, selectedId, selectedIds, hov
       ctx.lineWidth = (drawing.style?.lineWidth || 1.5) + (isHovered ? 1 : 0);
       renderDrawing(ctx, drawing, a, b, transform);
       if (isSelected) {
-        ctx.strokeStyle = 'rgba(255,255,255,.85)';
+        ctx.strokeStyle = theme.alpha(theme.text, 0.85);
         ctx.lineWidth = 1;
         const pts = drawing.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
         const xs = pts.map((p) => p.x); const ys = pts.map((p) => p.y);

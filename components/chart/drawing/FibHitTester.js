@@ -11,7 +11,7 @@
 // the base line, a center marker, and a width handle on the channel's
 // offset line — matching how channel handles behave.
 
-import { distanceToSegment } from './GeometryEngine';
+import { distanceToSegment } from './GeometryPrimitives';
 import { fibGeometry } from './FibGeometry';
 
 const HORIZONTAL_TYPES = ['fib', 'fibExtension', 'fibProjection'];

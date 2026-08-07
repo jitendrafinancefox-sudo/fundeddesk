@@ -1,5 +1,5 @@
 'use client';
-import { snapAnchor } from '../engine/SnappingEngine';
+
 import { anchorCountFor } from './DrawingDefinitions';
 import { captureAppend, captureStart, finalizeStroke } from './BrushEngine';
 
@@ -28,7 +28,7 @@ export function createToolManager({ getTransform, getCandles, createDrawing }) {
   const isClickPlace = (tool) => Boolean(DRAWING_CLICKPLACE[tool]);
   const snapped = (point) => {
     const transform = getTransform(); if (!transform) return null;
-    const anchor = snapAnchor(anchorFromPoint(transform, point), getCandles(), snap || undefined);
+    const anchor = anchorFromPoint(transform, point);
     return anchor && Number.isFinite(anchor.time) && Number.isFinite(anchor.price) ? anchor : null;
   };
   // Draft anchors: continuous tools use the captured point list; single-

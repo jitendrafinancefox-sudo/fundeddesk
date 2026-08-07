@@ -24,22 +24,34 @@ export function niceStep(raw) {
 }
 
 // "Nice" time tick step in seconds, chosen from human-friendly intervals
-// (1s → 5m → 1h → 1d → 1w …). Used by the time axis to pick label spacing.
+// (1s → 5m → 1h → 1d → 1w → 1M → 1Q → 1y). Used by the time axis to pick
+// label spacing; beyond 3 years steps climb in whole years.
 const TIME_STEPS = [
   1, 2, 5, 10, 15, 30,
   60, 120, 300, 600, 900, 1800, 3600,
   7200, 14400, 21600, 43200, 86400,
   172800, 259200, 604800, 1209600, 2592000,
+  7776000, 15552000, 31536000,
 ];
 export function niceTimeStep(raw) {
   for (const step of TIME_STEPS) if (step >= raw) return step;
-  return 2592000 * Math.ceil(raw / 2592000);
+  return 31536000 * Math.ceil(raw / 31536000);
 }
 
-// Price label with step-aware decimals: sub-unit steps show more precision,
-// larger steps stay clean (Indian numbering: lakh-style grouping).
-export function fmtPrice(price, step = 1) {
-  const decimals = step < 1 ? Math.min(4, Math.max(0, -Math.floor(Math.log10(step)))) : 2;
+// Smallest decimal count that represents multiples of `step` exactly:
+// 100 → 0, 25 → 0, 2.5 → 1, 1 → 0, 0.5 → 1, 0.25 → 2, 0.05 → 2.
+// Trial division (not log10) so non-power-of-ten steps stay exact.
+function decimalsForStep(step) {
+  let d = 0;
+  while (d < 4 && Math.abs(step * 10 ** d - Math.round(step * 10 ** d)) > 1e-9) d += 1;
+  return d;
+}
+
+// Price label with step-aware decimals: axis ticks round to the step's exact
+// precision (large steps → compact "24,500" instead of clipped "24,500.00"),
+// while callers without a step (live/crosshair badges) keep 2 decimals.
+export function fmtPrice(price, step = null) {
+  const decimals = step == null ? 2 : decimalsForStep(step);
   return price.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 

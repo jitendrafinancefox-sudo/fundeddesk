@@ -1,5 +1,5 @@
 'use client';
-import { distanceToSegment } from './GeometryEngine';
+import { distanceToSegment } from './GeometryPrimitives';
 
 // Pure channel math: every channel is stored as time+price anchors and
 // reduced to screen-space lines here for rendering, hit testing and handles.

@@ -1,13 +1,15 @@
 'use client';
-import { unionRect } from '../drawing/GeometryEngine';
+import { unionRect, padRect } from '../drawing/GeometryEngine';
 import { snapAnchor } from './SnappingEngine';
-import { isShapeType, isZoneType, isChannelType, isFibType, isStrokeType, normalizeShapeAnchors } from '../drawing/DrawingDefinitions';
-import { polygonCorners, polygonEdges, polygonCenter, resizeEdge } from '../drawing/ShapeGeometry';
+import { isShapeType, isZoneType, isChannelType, isFibType, isStrokeType, isPositionType, isTextType, normalizeShapeAnchors, DRAWING_DEFINITIONS } from '../drawing/DrawingDefinitions';
+import { polygonCorners, polygonEdges, polygonCenter, resizeEdge, resizeBox, resizeSquare, moveCorner } from '../drawing/ShapeGeometry';
 import { channelGeometry, isRegressionType, fitLinearRegression } from '../drawing/ChannelGeometry';
 import { fibGeometry } from '../drawing/FibBase';
 import { lowerBound } from '../drawing/BrushGeometry';
 import { eraseStroke, eraseTouches, convertToSmooth } from '../drawing/BrushEngine';
 import { strokeFamilyHit } from '../drawing/PathHitTester';
+import { textAnchorPoint, estimateBox, textBoundsRect } from '../drawing/TextGeometry';
+import { nextGroupId, defaultGroupName, drawingsFromTemplate } from '../drawing/DrawingManager';
 
 const clone = (value) => structuredClone(value);
 
@@ -46,7 +48,7 @@ export class DrawingInteraction {
 
   // Returns true when the pointer grabbed something (a drawing, a marquee,
   // or an Alt-duplicated copy), false when it is free space (caller starts
-  // a pan).
+  // a pan). TradingView-style: first click selects, second click+drag edits.
   pointerDown(point, { additive = false } = {}) {
     const mods = this.getMods() || {};
     let hit = this.hit(point);
@@ -61,8 +63,36 @@ export class DrawingInteraction {
       hit = this.duplicateForDrag(hit);
       if (!hit) return true;
     }
-    if (!additive) this.selection.clear();
-    this.selection.select(hit.id, { additive });
+
+    // TradingView-style: clicking an unselected drawing selects it but does
+    // NOT start editing. Only clicking a handle or an already-selected body
+    // enters edit mode. Shift-click always adds to selection without editing.
+    const alreadySelected = this.selection.has(hit.id);
+    if (!additive) {
+      if (!alreadySelected) {
+        // First click on an unselected drawing: select only, no edit mode
+        this.selection.clear();
+        this.selection.select(hit.id, { additive: false });
+        return true;
+      }
+      // Click on already-selected drawing: select it (refreshes selection) and
+      // fall through to enter edit mode below.
+      this.selection.select(hit.id, { additive: false });
+    } else {
+      // Shift-click: toggle selection, no edit mode
+      this.selection.select(hit.id, { additive: true });
+      return true;
+    }
+
+    // If we hit a handle on the selected drawing, always enter edit mode.
+    // If we hit the body of an already-selected drawing, enter edit mode.
+    // Handles always edit regardless of selection state.
+    const isHandle = hit.kind !== 'body';
+    if (!isHandle && !alreadySelected) {
+      // Shouldn't reach here due to early return above, but safety
+      return true;
+    }
+
     const transform = this.getTransform(); if (!transform) return true;
     const drawing = this.registry.get(hit.id); if (!drawing) return true;
     if (hit.kind === 'insert') {
@@ -96,10 +126,12 @@ export class DrawingInteraction {
     const transform = this.getTransform(); if (!transform) return;
     const mode = this.mode;
     const mods = this.getMods() || {};
-    const snapActive = !mods.ctrl;
+    const snapActive = !mods.ctrl && this.snap?.magnet;
     if (mode.kind === 'group') { this.moveGroup(point, transform, mode, mods, snapActive); return; }
     const next = clone(mode.original);
     const isChannel = isChannelType(mode.original.drawingType) || isFibType(mode.original.drawingType);
+    const isPosition = isPositionType(mode.original.drawingType);
+    const isText = isTextType(mode.original.drawingType);
     if (mode.kind === 'insert') {
       // Turn the drag into a real anchor at the cursor between from/to.
       let anchor = transform.pixelToAnchor(point.x, point.y);
@@ -110,7 +142,10 @@ export class DrawingInteraction {
       this.commit(this.replaceIn(this.getDrawings(), next), { rect: this.strokeDirty(mode.original, next, transform) });
       return;
     }
-    if (mode.kind === 'anchor') {
+    if (mode.kind === 'size' && isText) { this.textResize(point, mode, next); }
+    else if (mode.kind === 'anchor' && isPosition) { this.positionAnchor(point, transform, mode, next, snapActive); }
+    else if (mode.kind === 'midpoint' && isPosition) { this.moveBody(point, transform, mode, next, snapActive); }
+    else if (mode.kind === 'anchor') {
       if (isShapeType(mode.original.drawingType) || isChannel) this.shapeCorner(point, transform, mode, next, snapActive);
       else this.moveAnchor(point, transform, mode, next, mods, snapActive);
     }
@@ -122,8 +157,38 @@ export class DrawingInteraction {
     // Zones and extended channels paint full-width bands, so a partial
     // repaint can never clear the previous frame's band edges — dirty-rect
     // edits must fall back to a full invalidate for them.
-    const rect = isZoneType(mode.original.drawingType) || isChannel ? null : this.layers.dirtyRect(mode.original, next, transform);
+    const rect = isZoneType(mode.original.drawingType) || isChannel || isPosition
+      ? null
+      : isText ? this.textDirty(mode.original, next, transform) : this.layers.dirtyRect(mode.original, next, transform);
     this.commit(this.replaceIn(this.getDrawings(), next), { rect });
+  }
+
+  // Text box resize: drag the bottom-right size handle; the anchor (top-left
+  // pin) stays put. Disables auto-size so the manual box survives.
+  textResize(point, mode, next) {
+    const origin = textAnchorPoint(next, this.getTransform());
+    if (!origin) return;
+    const width = Math.max(40, point.x - origin.x);
+    const height = Math.max(24, point.y - origin.y);
+    next.text = { ...(next.text || {}), box: { width, height }, autoSize: false };
+  }
+
+  // Dirty rect for text/label edits: the box is px-sized and can exceed the
+  // anchor point, so the bounds come from the box geometry (rotation-aware).
+  textDirty(before, after, transform) {
+    const b = textBoundsRect(before, transform);
+    const a = textBoundsRect(after, transform);
+    if (!b || !a) return null;
+    return padRect(unionRect(b, a), 4);
+  }
+
+  // Entry/SL/TP drag: only the price changes, the anchor keeps its time.
+  // Matches the TradingView position tools where dragging a line moves it
+  // along the price axis while the position box stays at its placement time.
+  positionAnchor(point, transform, mode, next, snapActive) {
+    let anchor = transform.pixelToAnchor(point.x, point.y);
+    if (snapActive && this.snap.magnet) anchor = snapAnchor(anchor, this.getCandles(), this.snap);
+    next.anchorPoints[mode.anchorIndex] = { ...next.anchorPoints[mode.anchorIndex], price: anchor.price };
   }
 
   // Single-anchor edit: snap to OHLC when magnet is on, snap to other
@@ -149,12 +214,38 @@ export class DrawingInteraction {
     next.anchorPoints = next.anchorPoints.map((anchor) => ({ time: anchor.time + dt, price: anchor.price + dp }));
   }
 
-  // Shape corner drag: shape anchors ARE the corners (TL, TR, BR, BL for
-  // boxes; three points for triangles), so this is a straight anchor move
-  // with snapping — the rotated frame is implicit in the corner positions.
-  // Channels use the same path for their anchor handles; regression windows
-  // are refitted to the new anchor times so the fit always follows the data.
+  // Shape corner drag: resize with opposite corner fixed (box) or free move
+  // (triangle). Converts anchors → pixel corners, applies the geometric resize,
+  // then converts back to market coordinates so the shape stays consistent.
   shapeCorner(point, transform, mode, next, snapActive) {
+    if (isChannelType(next.drawingType)) { this.shapeCornerChannel(point, transform, mode, next, snapActive); return; }
+    const def = DRAWING_DEFINITIONS[next.drawingType];
+    const cornerCount = def?.cornerCount || 4;
+    const corners = next.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
+    if (corners.length < 3) {
+      let anchor = transform.pixelToAnchor(point.x, point.y);
+      if (snapActive && this.snap.magnet) anchor = snapAnchor(anchor, this.getCandles(), this.snap);
+      next.anchorPoints[mode.anchorIndex] = anchor;
+      return;
+    }
+    const idx = Math.min(mode.anchorIndex, corners.length - 1);
+    let moved;
+    if (cornerCount === 3) {
+      moved = moveCorner(corners, idx, point);
+    } else if (next.drawingType === 'circle') {
+      moved = resizeSquare(corners, idx, point);
+    } else {
+      moved = resizeBox(corners, idx, point);
+    }
+    next.anchorPoints = moved.map((p, i) => {
+      let result = transform.pixelToAnchor(p.x, p.y);
+      if (snapActive && this.snap.magnet) result = snapAnchor(result, this.getCandles(), this.snap);
+      return result;
+    });
+    if (isRegressionType(next.drawingType) && mode.anchorIndex <= 1) this.refitRegression(next);
+  }
+
+  shapeCornerChannel(point, transform, mode, next, snapActive) {
     let anchor = transform.pixelToAnchor(point.x, point.y);
     if (snapActive && this.snap.magnet) anchor = snapAnchor(anchor, this.getCandles(), this.snap);
     next.anchorPoints[mode.anchorIndex] = anchor;
@@ -202,15 +293,20 @@ export class DrawingInteraction {
 
   // Midpoint drag = resize: the midpoint follows the cursor and both anchors
   // scale symmetrically about the original midpoint.
+  // Midpoint drag = symmetric scale: the midpoint follows the cursor and
+  // all anchors scale about the drawing's geometric center. This keeps the
+  // shape's center stationary while the user drags a handle outward/inward.
   scaleMidpoint(point, transform, mode, next, snapActive) {
     const points = next.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
     if (points.length < 2) return;
-    const mid0 = midpointOf(points[0], points[1]);
-    const scale = distance(point, points[0]) / Math.max(1, distance(mid0, points[0]));
-    next.anchorPoints = next.anchorPoints.map((anchor, index) => {
+    const center = points.length >= 3 ? polygonCenter(points) : midpointOf(points[0], points[1]);
+    const oldDist = Math.max(1, distance(center, mode.startCursor || points[0]));
+    const newDist = Math.max(1, distance(center, point));
+    const scale = newDist / oldDist;
+    next.anchorPoints = next.anchorPoints.map((anchor) => {
       const p = transform.anchorToPixel(anchor); if (!p) return anchor;
-      const x = point.x + (p.x - mid0.x) * scale;
-      const y = point.y + (p.y - mid0.y) * scale;
+      const x = center.x + (p.x - center.x) * scale;
+      const y = center.y + (p.y - center.y) * scale;
       let result = transform.pixelToAnchor(x, y);
       if (snapActive && this.snap.magnet) result = snapAnchor(result, this.getCandles(), this.snap);
       return result;
@@ -222,6 +318,20 @@ export class DrawingInteraction {
   // channels, the midpoint for lines — then convert back to market
   // coordinates. Angle snapping to 15° steps while Shift is held.
   rotate(point, transform, mode, next) {
+    if (isTextType(next.drawingType)) {
+      // Single-anchor text boxes rotate in screen space around the box
+      // center; the rotation is stored in degrees on text.rotation.
+      const origin = textAnchorPoint(next, transform);
+      const box = estimateBox(next);
+      if (!origin) return;
+      const pivot = { x: origin.x + box.width / 2, y: origin.y + box.height / 2 };
+      const mods = this.getMods() || {};
+      let delta = Math.atan2(point.y - pivot.y, point.x - pivot.x) - Math.atan2(mode.startCursor.y - pivot.y, mode.startCursor.x - pivot.x);
+      if (mods.shift) delta = Math.round(delta / (Math.PI / 12)) * (Math.PI / 12);
+      const current = Number(next.text?.rotation) || 0;
+      next.text = { ...(next.text || {}), rotation: (current + (delta * 180) / Math.PI + 360) % 360 };
+      return;
+    }
     const points = next.anchorPoints.map(transform.anchorToPixel).filter(Boolean);
     if (points.length < 2) return;
     let pivot = null;
@@ -346,8 +456,12 @@ export class DrawingInteraction {
     this.selection.select(drawing.id);
   }
 
-  delete() {
-    const ids = this.selection.ids(); if (!ids.length) return;
+  delete() { this.deleteIds(this.selection.ids()); }
+
+  // Bulk delete (object tree): removes the given ids as one undoable group.
+  deleteIds(ids) {
+    ids = ids.filter((id) => this.registry.get(id));
+    if (!ids.length) return;
     const drawings = this.getDrawings();
     this.history.beginGroup('Delete drawings');
     ids.forEach((id) => {
@@ -580,21 +694,162 @@ export class DrawingInteraction {
     });
   }
 
+  // Position payload patch (properties panel): lots / account / currency /
+  // fixed risk / fixed reward. Merged into drawing.position as one undoable
+  // delta command; derived risk/reward numbers are recomputed at render.
+  updatePosition(id, patch) {
+    const drawing = this.registry.get(id); if (!drawing) return;
+    const next = { ...drawing, position: { ...(drawing.position || {}), ...patch } };
+    this.history.execute({
+      label: 'Position settings',
+      apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+      revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+    });
+  }
+
+  // Flip direction: swap the SL and TP anchors so a long becomes a short
+  // (and vice versa) in one undoable command.
+  flipPosition(id) {
+    const drawing = this.registry.get(id); if (!drawing || !isPositionType(drawing.drawingType)) return;
+    const [entry, sl, tp] = drawing.anchorPoints;
+    if (!sl || !tp) return;
+    const next = { ...drawing, anchorPoints: [entry, tp, sl] };
+    this.history.execute({
+      label: 'Flip position',
+      apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+      revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+    });
+  }
+
+  // Text payload patch (properties panel): font / box / alignment etc.
+  // Merged into drawing.text as one undoable delta command.
+  updateText(id, patch) {
+    const drawing = this.registry.get(id); if (!drawing) return;
+    const next = { ...drawing, text: { ...(drawing.text || {}), ...patch } };
+    this.history.execute({
+      label: 'Text settings',
+      apply: () => this.commit(this.replaceIn(this.getDrawings(), next)),
+      revert: () => this.commit(this.replaceIn(this.getDrawings(), drawing)),
+    });
+  }
+
+  // Live content edit (textarea typing): committed without a history entry
+  // so keystrokes don't flood the undo stack.
+  updateTextLive(id, patch) {
+    const drawing = this.registry.get(id); if (!drawing) return;
+    const next = { ...drawing, text: { ...(drawing.text || {}), ...patch } };
+    this.commit(this.replaceIn(this.getDrawings(), next));
+  }
+
   // Z-order move (context menu): reorders the drawing list; registry order
   // is the render z-order, so this changes stacking without touching data.
+  // Directions: front/back jump to the ends, forward/backward step one place.
   zMove(id, direction) {
     const drawing = this.registry.get(id); if (!drawing) return;
     const before = this.getDrawings();
-    const list = [...before];
+    let list = [...before];
     const index = list.findIndex((item) => item.id === id);
     if (index === -1) return;
-    list.splice(index, 1);
-    if (direction === 'front') list.push(drawing); else list.unshift(drawing);
+    if (direction === 'front') { list.splice(index, 1); list.push(drawing); }
+    else if (direction === 'back') { list.splice(index, 1); list.unshift(drawing); }
+    else if (direction === 'forward') { if (index < list.length - 1) { list[index] = list[index + 1]; list[index + 1] = drawing; } else return; }
+    else if (direction === 'backward') { if (index > 0) { list[index] = list[index - 1]; list[index - 1] = drawing; } else return; }
+    else return;
+    const label = ({ front: 'Bring to front', back: 'Send to back', forward: 'Bring forward', backward: 'Send backward' })[direction];
     this.history.execute({
-      label: direction === 'front' ? 'Bring to front' : 'Send to back',
+      label,
       apply: () => this.commit(list),
       revert: () => this.commit(before),
     });
+  }
+
+  // Exact z-order from the object tree (drag & drop): `ids` must be a
+  // permutation of the current drawing list; the commit is one undoable step.
+  reorder(ids) {
+    const before = this.getDrawings();
+    if (before.length !== ids.length) return;
+    const byId = new Map(before.map((item) => [item.id, item]));
+    const list = ids.map((id) => byId.get(id)).filter(Boolean);
+    if (list.length !== before.length) return;
+    this.history.execute({
+      label: 'Reorder drawings',
+      apply: () => this.commit(list),
+      revert: () => this.commit(before),
+    });
+  }
+
+  // Bulk style patch (object tree presets / multi-select): one undoable
+  // history group covering every selected drawing.
+  applyStyle(ids, patch) {
+    const drawings = this.getDrawings();
+    const targets = ids.map((id) => drawings.find((item) => item.id === id)).filter(Boolean);
+    if (!targets.length) return;
+    const originals = targets.map((item) => clone(item));
+    const nexts = targets.map((item) => ({ ...item, style: { ...(item.style || {}), ...patch } }));
+    const next = this.groupReplace(drawings, nexts);
+    const dirty = this.groupDirty(originals, nexts, this.getTransform());
+    this.history.execute({
+      label: 'Apply style',
+      apply: () => this.commit(next, { rect: dirty }),
+      revert: () => this.commit(this.groupReplace(this.getDrawings(), originals), { rect: dirty }),
+    });
+  }
+
+  // Group selected drawings: every member gets a shared groupId (and name).
+  group(ids) {
+    const targets = ids.map((id) => this.registry.get(id)).filter(Boolean);
+    if (!targets.length) return;
+    const groupId = nextGroupId(); const groupName = defaultGroupName(groupId);
+    const originals = targets.map(clone);
+    const nexts = targets.map((item) => ({ ...item, groupId, groupName }));
+    const next = this.groupReplace(this.getDrawings(), nexts);
+    this.history.execute({
+      label: 'Group drawings',
+      apply: () => this.commit(next),
+      revert: () => this.commit(this.groupReplace(this.getDrawings(), originals)),
+    });
+  }
+
+  // Ungroup: members lose their groupId; empty groups disappear implicitly.
+  ungroup(ids) {
+    const targets = ids.map((id) => this.registry.get(id)).filter(Boolean);
+    if (!targets.length) return;
+    const originals = targets.map(clone);
+    const nexts = targets.map((item) => { const copy = { ...item, groupId: null, groupName: null }; delete copy.groupId; delete copy.groupName; return copy; });
+    const next = this.groupReplace(this.getDrawings(), nexts);
+    this.history.execute({
+      label: 'Ungroup drawings',
+      apply: () => this.commit(next),
+      revert: () => this.commit(this.groupReplace(this.getDrawings(), originals)),
+    });
+  }
+
+  // Rename a group: updates the name on every member (one history command).
+  renameGroup(groupId, name) {
+    const drawings = this.getDrawings();
+    const members = drawings.filter((item) => item.groupId === groupId);
+    if (!members.length) return;
+    const originals = members.map(clone);
+    const nexts = members.map((item) => ({ ...item, groupName: String(name).slice(0, 60) }));
+    const next = this.groupReplace(drawings, nexts);
+    this.history.execute({
+      label: 'Rename group',
+      apply: () => this.commit(next),
+      revert: () => this.commit(this.groupReplace(this.getDrawings(), originals)),
+    });
+  }
+
+  // Apply a template: materialize fresh drawings (new ids, current chart
+  // identity, no group state) and select them — one undoable command.
+  applyTemplate(template, identity = {}) {
+    const copies = drawingsFromTemplate(template, identity);
+    if (!copies.length) return;
+    this.history.execute({
+      label: `Apply template: ${template.name}`,
+      apply: () => this.commit([...this.getDrawings(), ...copies]),
+      revert: () => this.commit(this.getDrawings().filter((item) => !copies.some((copy) => copy.id === item.id))),
+    });
+    this.selection.replace(copies.map((copy) => copy.id));
   }
 
   groupReplace(list, nexts) {
@@ -602,10 +857,12 @@ export class DrawingInteraction {
     return list.map((item) => byId.get(item.id) || item);
   }
   groupDirty(originals, nexts, transform) {
-    if (originals.some((item) => isZoneType(item.drawingType) || isChannelType(item.drawingType))) return null;
+    if (originals.some((item) => isZoneType(item.drawingType) || isChannelType(item.drawingType) || isPositionType(item.drawingType))) return null;
     let rect = null;
     for (let i = 0; i < originals.length; i += 1) {
-      const part = this.layers.dirtyRect(originals[i], nexts[i], transform);
+      const part = isTextType(originals[i].drawingType)
+        ? this.textDirty(originals[i], nexts[i], transform)
+        : this.layers.dirtyRect(originals[i], nexts[i], transform);
       if (!part) return null;
       rect = rect ? unionRect(rect, part) : part;
     }
@@ -616,7 +873,8 @@ export class DrawingInteraction {
 const angleLocked = (pivot, cursor) => {
   const dx = cursor.x - pivot.x; const dy = cursor.y - pivot.y;
   const angle = Math.atan2(dy, dx);
-  const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+  // 15-degree increments (TradingView convention)
+  const snapped = Math.round(angle / (Math.PI / 12)) * (Math.PI / 12);
   const length = Math.hypot(dx, dy);
   return { x: pivot.x + Math.cos(snapped) * length, y: pivot.y + Math.sin(snapped) * length };
 };

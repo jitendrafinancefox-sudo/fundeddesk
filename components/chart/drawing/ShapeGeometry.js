@@ -1,5 +1,5 @@
 'use client';
-import { distanceToSegment } from './GeometryEngine';
+import { distanceToSegment } from './GeometryPrimitives';
 
 // Pure screen-space polygon math for shape tools (rect, rotated rect,
 // circle, ellipse, triangle, zones). Shapes are stored as corner anchors in

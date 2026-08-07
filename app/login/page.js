@@ -25,6 +25,9 @@ export default function Login() {
         {err && <div className="err">{err}</div>}
         <div className="field"><label>Email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
         <div className="field"><label>Password</label><input type="password" value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} /></div>
+        <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 8, marginBottom: 10, textAlign: 'center' }}>
+          <Link href="/forgot-password" style={{ color: 'var(--blue)' }}>Forgot password?</Link>
+        </p>
         <button className="btn btn-grad" style={{ width: '100%' }} onClick={submit} disabled={busy}>{busy ? 'Logging in…' : 'Log In'}</button>
         <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 18, textAlign: 'center' }}>
           New here? <Link href="/signup" style={{ color: 'var(--blue)' }}>Create an account</Link>

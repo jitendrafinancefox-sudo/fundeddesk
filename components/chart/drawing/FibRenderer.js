@@ -14,8 +14,10 @@
 import { fibGeometry } from './FibGeometry';
 import { fibLabelConfig, fibLabelText, resolveLabelPosition, drawFibLabel } from './FibLabelRenderer';
 import { fibFormatPrice } from './FibLevelManager';
+import { themeTokens } from '../engine/ThemeManager';
 
 const LEVEL_ALPHA = 0.045;
+const theme = themeTokens();
 const DASH = [6, 4];
 const HORIZONTAL_TYPES = ['fib', 'fibExtension', 'fibProjection'];
 
@@ -53,7 +55,7 @@ function paintBands(ctx, geometry, style, horizontal) {
     const top = levels[0].y; const bottom = levels[levels.length - 1].y;
     if (Math.abs(bottom - top) < 1) return;
     const gradient = ctx.createLinearGradient(0, top, 0, bottom);
-    levels.forEach((line, index) => gradient.addColorStop(index / Math.max(1, levels.length - 1), line.color || style.color || '#4d7cfe'));
+    levels.forEach((line, index) => gradient.addColorStop(index / Math.max(1, levels.length - 1), line.color || style.color || theme.accent));
     ctx.fillStyle = gradient;
     ctx.globalAlpha = style.opacity ?? 0.16;
     ctx.fillRect(left, Math.min(top, bottom), width, Math.abs(bottom - top));
@@ -64,7 +66,7 @@ function paintBands(ctx, geometry, style, horizontal) {
     const ys = levels.map((line) => line.y);
     const top = Math.min(...ys); const bottom = Math.max(...ys);
     if (Math.abs(bottom - top) < 1) return;
-    ctx.fillStyle = style.color || '#4d7cfe';
+    ctx.fillStyle = style.color || theme.accent;
     ctx.globalAlpha = style.opacity ?? 0.12;
     ctx.fillRect(left, top, width, bottom - top);
     ctx.globalAlpha = 1;
@@ -74,7 +76,7 @@ function paintBands(ctx, geometry, style, horizontal) {
   for (let i = 0; i < enabled.length - 1; i += 1) {
     const top = enabled[i]; const bottom = enabled[i + 1];
     if (Math.abs(bottom.y - top.y) < 1) continue;
-    ctx.fillStyle = (i % 2 === 0 ? top : bottom).color || style.color || '#4d7cfe';
+    ctx.fillStyle = (i % 2 === 0 ? top : bottom).color || style.color || theme.accent;
     ctx.globalAlpha = LEVEL_ALPHA;
     ctx.fillRect(left, Math.min(top.y, bottom.y), width, Math.abs(bottom.y - top.y));
     ctx.globalAlpha = 1;
@@ -100,7 +102,7 @@ function priceAt(drawing, transform, geometry, line) {
 function paintLabels(ctx, drawing, transform, geometry, config, bounds) {
   const { type } = geometry;
   if (type === 'fibSpiral') return;
-  const colorOf = (line) => line.color || drawing.style?.color || '#4d7cfe';
+  const colorOf = (line) => line.color || drawing.style?.color || theme.accent;
   if (type === 'fibChannel') {
     if (!geometry.levelLines) return; // incomplete placement (1-2 anchors)
     geometry.levelLines.forEach((line) => {
@@ -144,7 +146,7 @@ export function renderFib(ctx, drawing, transform) {
   if (!geometry) return;
   const style = drawing.style || {};
   const config = fibLabelConfig(drawing);
-  const color = style.color || '#4d7cfe';
+  const color = style.color || theme.accent;
   const arrow = Boolean(style.arrow);
   ctx.save();
   ctx.globalAlpha = style.opacity ?? 1;
