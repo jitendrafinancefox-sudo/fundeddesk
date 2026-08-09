@@ -36,7 +36,7 @@ function extractDrawingAlerts(drawings) {
     .filter((entry) => entry.ref != null);
 }
 
-export default function AlertManager({ activePane }) {
+export default function AlertManager({ activePane, chartKey: chartKeyOverride }) {
   const alerts = useTradeState('alerts');
   const [type, setType] = useState('price');
   const [condition, setCondition] = useState('above');
@@ -52,7 +52,9 @@ export default function AlertManager({ activePane }) {
   const token = activePane?.token;
   const symbol = activePane?.symbol || '—';
   const paneId = activePane?.id ?? activePane?.paneId;
-  const chartKey = paneId != null && token != null ? `pane-${paneId}-${token}` : null;
+  // Host pages with a different drawing persistence key (e.g. /tv-chart
+  // stores under "tv-overlay-a") can override the derived pane key.
+  const chartKey = chartKeyOverride != null ? chartKeyOverride : (paneId != null && token != null ? `pane-${paneId}-${token}` : null);
 
   const loadDrawings = () => {
     if (!chartKey) return;

@@ -14,6 +14,31 @@ export function createOverlayViewport({ tvChart, container }) {
   const timeScale = () => tvChart.chart.timeScale();
   const series = () => tvChart.series;
 
+  // LWC's timeToCoordinate only maps times that exactly equal a data bar
+  // time. Anchors placed on a finer interval (e.g. 5m) would otherwise
+  // return null once the chart switches to a coarser interval (e.g. 15m),
+  // dropping drawings. Snap such times to the nearest bar time first.
+  const snapTimeToBar = (t) => {
+    const data = series().data();
+    if (!data || !data.length) return t;
+    let lo = 0;
+    let hi = data.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (data[mid].time < t) lo = mid + 1; else hi = mid - 1;
+    }
+    const prev = hi >= 0 ? data[hi].time : null;
+    const next = lo < data.length ? data[lo].time : null;
+    if (prev == null) return next;
+    if (next == null) return prev;
+    return t - prev <= next - t ? prev : next;
+  };
+
+  const timeToCoordinate = (t) => {
+    const x = timeScale().timeToCoordinate(t);
+    return x == null ? timeScale().timeToCoordinate(snapTimeToBar(t)) : x;
+  };
+
   const projection = {
     // --- Price <-> pixel (vertical) ----------------------------------------
     pixelToPrice: (y) => series().coordinateToPrice(y),
@@ -21,15 +46,15 @@ export function createOverlayViewport({ tvChart, container }) {
     // --- Time <-> pixel (horizontal) ---------------------------------------
     pixelToIndex: (x) => timeScale().coordinateToLogical(x),
     pixelToTime: (x) => timeScale().coordinateToTime(x),
-    timeToPixel: (t) => timeScale().timeToCoordinate(t),
+    timeToPixel: (t) => timeToCoordinate(t),
     timeToIndex: (t) => {
-      const x = timeScale().timeToCoordinate(t);
+      const x = timeToCoordinate(t);
       return x == null ? null : timeScale().coordinateToLogical(x);
     },
     // --- Screen-space round trips (screen == chart plot area) --------------
     screenToTime: (x) => timeScale().coordinateToTime(x),
     screenToPrice: (y) => series().coordinateToPrice(y),
-    timeToScreen: (t) => timeScale().timeToCoordinate(t),
+    timeToScreen: (t) => timeToCoordinate(t),
     priceToScreen: (value) => series().priceToCoordinate(value),
     // --- Space mappings (overlay == chart plot area, identity) -------------
     canvasToChart: (x, y) => ({ x, y }),
@@ -38,7 +63,7 @@ export function createOverlayViewport({ tvChart, container }) {
     screenToViewport: (x, y) => ({ x, y }),
     // --- Drawing anchors (market coords are ALWAYS {time, price}) ----------
     anchorToPixel: (anchor) => {
-      const x = timeScale().timeToCoordinate(anchor.time);
+      const x = timeToCoordinate(anchor.time);
       const y = series().priceToCoordinate(anchor.price);
       return x == null || y == null ? null : { x, y };
     },
@@ -81,7 +106,7 @@ export function createOverlayViewport({ tvChart, container }) {
     const ts = timeScale();
     const range = ts.getVisibleLogicalRange();
     if (!range) return;
-    const x = ts.timeToCoordinate(time);
+    const x = timeToCoordinate(time);
     if (x == null) return;
     const delta = x - ts.coordinateToLogical(0);
     ts.setVisibleLogicalRange({ from: range.from + delta, to: range.to + delta });

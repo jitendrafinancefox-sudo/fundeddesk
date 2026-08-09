@@ -1,5 +1,6 @@
 import './globals.css';
 import Nav from '@/components/Nav';
+import SiteFooter from '@/components/SiteFooter';
 import SiteBackground from '@/components/SiteBackground';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -23,16 +24,7 @@ export default function RootLayout({ children }) {
         <ThemeToggle />
         <Nav />
         {children}
-        <footer className="foot">
-          <div className="wrap">
-            <div className="disc">
-              <b>Risk Disclosure:</b> FundedDesk offers skill-based trader evaluations on simulated accounts using
-              live market data; orders are not placed on any exchange, and funded-stage capital remains simulated.
-              Trading involves risk and is not suitable for everyone. Past performance does not guarantee future
-              results. Rewards, payouts, and account access are subject to the Rulebook and program terms.
-            </div>
-          </div>
-        </footer>
+        <SiteFooter />
       </body>
     </html>
   );

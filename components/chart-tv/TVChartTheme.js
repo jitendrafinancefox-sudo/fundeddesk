@@ -10,6 +10,18 @@ export const TV_LIGHT_THEME = {
   fontSize: 12,
 };
 
+export const TV_DARK_THEME = {
+  background: '#131722',
+  grid: '#1e222d',
+  crosshair: '#758696',
+  scaleText: '#b2b5be',
+  border: '#2a2e39',
+  up: '#26a69a',
+  down: '#ef5350',
+  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontSize: 12,
+};
+
 export function buildChartOptions(theme = TV_LIGHT_THEME) {
   return {
     layout: {

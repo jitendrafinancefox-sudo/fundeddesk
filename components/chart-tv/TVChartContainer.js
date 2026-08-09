@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { TVChart } from './TVChart';
 import { TV_LIGHT_THEME } from './TVChartTheme';
 import { createOverlayRoot } from './overlay/OverlayRoot';
+import { buildIndicators } from '@/components/chart/IndicatorEngine';
 
 export default function TVChartContainer({
   exchange,
@@ -17,6 +18,7 @@ export default function TVChartContainer({
   onReady,
   onError,
   overlay = null,
+  indicators = [],
 }) {
   const hostRef = useRef(null);
   const chartRef = useRef(null);
@@ -80,14 +82,17 @@ export default function TVChartContainer({
     const controller = new AbortController();
     chart
       .setSymbol({ exchange, token, symbol, interval }, controller.signal)
-      .then(() => overlayRef.current?.setCandles(chart.getCandles()))
+      .then(() => {
+        overlayRef.current?.setCandles(chart.getCandles());
+        chart.setIndicators(buildIndicators(chart.getCandles(), indicators));
+      })
       .catch((error) => {
         if (error?.name !== 'AbortError') onError?.(error);
       });
     return () => controller.abort();
-  }, [exchange, token, symbol, interval]);
+  }, [exchange, token, symbol, interval, indicators]);
 
-  return <div ref={hostRef} className={className} style={style} />;
+  return <div ref={hostRef} className={className} style={{ ...style, position: 'relative', overflow: 'hidden' }} />;
 }
 
 export { TVChart };

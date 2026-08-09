@@ -37,7 +37,7 @@ export default function Nav() {
     setTimeout(() => window.location.replace('/'), 100);
   }
 
-  const inAppRoute = pathname?.startsWith('/portal') || pathname?.startsWith('/admin') || pathname?.startsWith('/india') || pathname?.startsWith('/terminal') || pathname?.startsWith('/web-terminal');
+  const inAppRoute = pathname?.startsWith('/portal') || pathname?.startsWith('/admin') || pathname?.startsWith('/india') || pathname?.startsWith('/terminal') || pathname?.startsWith('/web-terminal') || pathname?.startsWith('/tv-chart');
   const publicPageButLoggedIn = user && (pathname === '/rules' || pathname === '/faq' || pathname === '/challenges');
   if (inAppRoute || publicPageButLoggedIn) return null;
 

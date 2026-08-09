@@ -61,14 +61,6 @@ export default function OrderPanel({ open, selection, chain, side: defaultSide, 
   const marginRequired = estCost * 0.2;
   const valid = lotsValid && limitValid && triggerValid && estCost > 0;
 
-  // Charges + net P&L (live): gross reward/risk minus estimated charges.
-  const charges = estCost > 0 ? estimateCharges(estCost) : null;
-  let netReward = null; let netRisk = null;
-  if (riskAmount != null && charges) {
-    netReward = rewardAmount != null ? rewardAmount - charges.total : null;
-    netRisk = riskAmount + charges.total;
-  }
-
   // --- Risk preview (BUY: stop below entry; SELL: stop above entry) ---------
   let riskAmount = null; let rewardAmount = null; let rr = null;
   if (stopNum != null && targetNum != null && lastPrice > 0) {
@@ -78,6 +70,14 @@ export default function OrderPanel({ open, selection, chain, side: defaultSide, 
       riskAmount = riskPerUnit * quantity;
       if (rewardPerUnit > 0) { rewardAmount = rewardPerUnit * quantity; rr = rewardPerUnit / riskPerUnit; }
     }
+  }
+
+  // Charges + net P&L (live): gross reward/risk minus estimated charges.
+  const charges = estCost > 0 ? estimateCharges(estCost) : null;
+  let netReward = null; let netRisk = null;
+  if (riskAmount != null && charges) {
+    netReward = rewardAmount != null ? rewardAmount - charges.total : null;
+    netRisk = riskAmount + charges.total;
   }
 
   const errors = [];

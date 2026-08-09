@@ -32,6 +32,7 @@ function createCanvas(className) {
     height: '100%',
     pointerEvents: 'none',
     display: 'block',
+    zIndex: 5,
   });
   return canvas;
 }
@@ -51,6 +52,18 @@ export function createOverlayRoot({
   onProperties = null,
 }) {
   if (!container || !tvChart?.chart) throw new Error('OverlayRoot requires a container and a mounted TVChart');
+
+  // The overlay canvases are absolutely positioned and anchored to this
+  // container, so it MUST be a CSS positioning context or they will anchor to
+  // the nearest positioned ancestor (potentially the page body) and render
+  // outside their own chart panel. Force `position: relative` (unless the
+  // host already establishes a context) and clip with `overflow: hidden` so
+  // even a stray off-panel paint never bleeds across the page.
+  try {
+    const cs = getComputedStyle(container);
+    if (cs.position === 'static') container.style.position = 'relative';
+    if (cs.overflow === 'visible') container.style.overflow = 'hidden';
+  } catch { /* styles unavailable — container styling is set by the host */ }
 
   // --- Layer canvases -------------------------------------------------------
   const canvases = {};
@@ -171,7 +184,7 @@ export function createOverlayRoot({
       const ctx = previewCanvas.getContext('2d');
       ctx.save();
       setTransform(ctx, dpr);
-      renderer.paintPending(pendingDrawing);
+      renderer.paintPending(pendingDrawing, ctx);
       ctx.restore();
     }
     } catch (error) {

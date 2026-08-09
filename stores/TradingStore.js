@@ -83,6 +83,8 @@ function loadState() {
 
 const state = loadState() || emptyState();
 const listeners = { account: new Set(), positions: new Set(), orders: new Set(), trades: new Set(), alerts: new Set(), notifications: new Set() };
+const serverSnapshots = {};
+for (const topic of Object.keys(listeners)) serverSnapshots[topic] = emptyState()[topic];
 let persistTimer = null;
 
 function persist() {
@@ -288,7 +290,7 @@ export const TradingStore = {
     return () => listeners[topic].delete(fn);
   },
   getSnapshot(topic) { return state[topic]; },
-  getServerSnapshot(topic) { return emptyState()[topic]; },
+  getServerSnapshot(topic) { return serverSnapshots[topic]; },
   get() { return state; },
 
   lotSizeFor,

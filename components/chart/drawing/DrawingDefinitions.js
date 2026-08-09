@@ -29,7 +29,7 @@ import { renderLabel } from './LabelRenderer';
 import { textHit, labelHit } from './TextHitTester';
 import { isTextType, isLabelType, textColorFor } from './TextGeometry';
 import { themeTokens } from '../engine/ThemeManager';
-export { isChannelType } from './ChannelGeometry';
+export { isChannelType, isRegressionType } from './ChannelGeometry';
 export { isFibType };
 export { isStrokeType, isFreehandType, isClickPlaceType };
 export { isPositionType };

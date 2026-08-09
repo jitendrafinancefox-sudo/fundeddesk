@@ -1,7 +1,7 @@
-import { createChart } from 'lightweight-charts';
+import { createChart, LineSeries, HistogramSeries } from 'lightweight-charts';
 import { marketData } from '@/services/marketData';
 import { normalizeCandles } from '@/services/candleAggregator';
-import { TV_LIGHT_THEME, buildChartOptions, applyTimeframeOptions } from './TVChartTheme';
+import { TV_LIGHT_THEME, buildChartOptions, buildCandleSeriesOptions, applyTimeframeOptions } from './TVChartTheme';
 import {
   createCandleSeries,
   setSeriesCandles,
@@ -66,6 +66,61 @@ export class TVChart {
     const last = this.candles[this.candles.length - 1];
     if (last && last.time === normalized.time) Object.assign(last, normalized);
     else this.candles.push(normalized);
+    return this;
+  }
+
+  // Re-theme chart + candle series at runtime (layout, grid, crosshair,
+  // scales and candle colors all flip together).
+  setTheme(theme) {
+    this.theme = theme || TV_LIGHT_THEME;
+    try { this.chart?.applyOptions(buildChartOptions(this.theme)); } catch { /* keep previous state */ }
+    try { this.series?.applyOptions(buildCandleSeriesOptions(this.theme)); } catch { /* keep previous state */ }
+    return this;
+  }
+
+  // Renders the flat list produced by IndicatorEngine.buildIndicators:
+  // overlay studies on the price pane, lower studies on a separate pane
+  // beneath it. Rebuilds (and cleans up) on every call.
+  setIndicators(built = []) {
+    const items = built || [];
+    this._indicatorSeries?.forEach((series) => { try { series.remove(); } catch { /* already removed */ } });
+    this._indicatorSeries = [];
+    while (this.chart.panes().length > 1) {
+      try { this.chart.removePane(this.chart.panes().length - 1); } catch { break; }
+    }
+    items.forEach((item) => {
+      const lower = item.kind === 'volume' || item.kind === 'rsi' || item.kind === 'histogram';
+      const paneIndex = lower ? 1 : 0;
+      const points = item.points || [];
+      let series = null;
+      if (item.kind === 'volume') {
+        series = this.chart.addSeries(HistogramSeries, {
+          priceFormat: { type: 'volume' },
+          lastValueVisible: false,
+          priceLineVisible: false,
+          paneIndex,
+        });
+        series.setData(points.map((p) => ({ time: p.time, value: p.value, color: p.rising ? '#26a69a' : '#ef5350' })));
+      } else if (item.kind === 'histogram') {
+        series = this.chart.addSeries(HistogramSeries, {
+          color: item.color || '#8a8f98',
+          lastValueVisible: false,
+          priceLineVisible: false,
+          paneIndex,
+        });
+        series.setData(points.map((p) => ({ time: p.time, value: p.price })));
+      } else {
+        series = this.chart.addSeries(LineSeries, {
+          color: item.color || '#4d7cfe',
+          lineWidth: 2,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          paneIndex,
+        });
+        series.setData(points.map((p) => ({ time: p.time, value: p.price })));
+      }
+      this._indicatorSeries.push(series);
+    });
     return this;
   }
 
@@ -177,6 +232,8 @@ export class TVChart {
 
   destroy() {
     this._fetchController?.abort();
+    this._indicatorSeries?.forEach((series) => { try { series.remove(); } catch { /* already removed */ } });
+    this._indicatorSeries = [];
     this._disposers.forEach((dispose) => {
       try {
         dispose();

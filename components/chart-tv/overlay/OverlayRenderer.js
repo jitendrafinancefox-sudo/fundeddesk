@@ -24,30 +24,32 @@ export function createOverlayRenderer({ canvas, getTransform, getDrawings, getSe
   const accent = theme.accent || '#2962ff';
   const debug = { lastRender: null };
 
-  const applyStyle = (drawing, isSelected, isHovered) => {
-    ctx.save();
+  const applyStyle = (g, drawing, isSelected, isHovered) => {
+    g.save();
     const base = drawing.style?.color || theme.gold;
-    if (isSelected) { ctx.strokeStyle = accent; ctx.fillStyle = accent; }
-    else if (isHovered) { ctx.strokeStyle = alpha(accent, 0.6); ctx.fillStyle = alpha(accent, 0.6); }
-    else { ctx.strokeStyle = base; ctx.fillStyle = base; }
-    ctx.lineWidth = (drawing.style?.lineWidth || 1.5) + (isHovered ? 1 : 0);
-    if (drawing.style?.dash) ctx.setLineDash([6, 4]);
+    if (isSelected) { g.strokeStyle = accent; g.fillStyle = accent; }
+    else if (isHovered) { g.strokeStyle = alpha(accent, 0.6); g.fillStyle = alpha(accent, 0.6); }
+    else { g.strokeStyle = base; g.fillStyle = base; }
+    g.lineWidth = (drawing.style?.lineWidth || 1.5) + (isHovered ? 1 : 0);
+    if (drawing.style?.dash) g.setLineDash([6, 4]);
   };
 
-  const paintOne = (drawing, transform, { isSelected = false, isHovered = false, preview = false } = {}) => {
+  const paintOne = (drawing, transform, { isSelected = false, isHovered = false, preview = false, targetCtx = null } = {}) => {
+    const g = targetCtx || ctx;
+    if (!g) return;
     const points = pointsOf(drawing, transform);
     if (!points.length) return;
     const [a, b = a] = points;
-    ctx.save();
+    g.save();
     if (preview) {
-      ctx.strokeStyle = accent; ctx.fillStyle = accent;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 3]);
+      g.strokeStyle = accent; g.fillStyle = accent;
+      g.lineWidth = 1.5;
+      g.setLineDash([4, 3]);
     } else {
-      applyStyle(drawing, isSelected, isHovered);
+      applyStyle(g, drawing, isSelected, isHovered);
     }
-    renderDrawing(ctx, drawing, a, b, transform);
-    ctx.restore();
+    renderDrawing(g, drawing, a, b, transform);
+    g.restore();
   };
 
   const render = (rect) => {
@@ -77,12 +79,13 @@ export function createOverlayRenderer({ canvas, getTransform, getDrawings, getSe
     ctx.restore();
   };
 
-  const paintPending = (drawing) => {
-    if (!ctx) return;
-    ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (drawing) paintOne(drawing, getTransform(), { preview: true });
-    ctx.restore();
+  const paintPending = (drawing, targetCtx = null) => {
+    const g = targetCtx || ctx;
+    if (!g) return;
+    g.save();
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    if (drawing) paintOne(drawing, getTransform(), { preview: true, targetCtx: g });
+    g.restore();
   };
 
   const clear = () => { ctx?.clearRect(0, 0, canvas.width, canvas.height); };

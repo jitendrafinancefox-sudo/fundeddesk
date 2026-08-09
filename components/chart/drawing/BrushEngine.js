@@ -17,8 +17,21 @@ import { distanceToStroke } from './BrushGeometry';
 
 const MIN_ERASE_RUN = 4;
 
+// Only a fully-resolved pixel->anchor result is usable: coordinateToTime and
+// coordinateToPrice return null outside the plotted range (past the last
+// candle, over the scale margins), so the anchor itself can carry null
+// fields even though pixelToAnchor always returns an object. Drop those
+// points silently — a stroke simply doesn't extend past the valid area, it
+// never carries an invalid {time, price} anchor downstream. This is the only
+// place the brush path converts pointer positions, so the guard stays cheap
+// (two Number.isFinite checks per captured point).
+const usableAnchor = (transform, x, y) => {
+  const anchor = transform.pixelToAnchor(x, y);
+  return anchor && Number.isFinite(anchor.time) && Number.isFinite(anchor.price) ? anchor : null;
+};
+
 export function captureStart(transform, point) {
-  const anchor = transform.pixelToAnchor(point.x, point.y);
+  const anchor = usableAnchor(transform, point.x, point.y);
   return anchor ? [{ time: anchor.time, price: anchor.price }] : null;
 }
 
@@ -32,7 +45,7 @@ export function captureAppend(anchors, transform, point, minDist = 2.5) {
     const dx = point.x - pixel.x; const dy = point.y - pixel.y;
     if (dx * dx + dy * dy < minDist * minDist) return null;
   }
-  const anchor = transform.pixelToAnchor(point.x, point.y);
+  const anchor = usableAnchor(transform, point.x, point.y);
   if (!anchor) return null;
   return [...anchors, { time: anchor.time, price: anchor.price }];
 }
