@@ -5,8 +5,13 @@ import {
   ArrowRight, MoveDiagonal, Minus, ArrowUpDown, AlignCenterVertical, TrendingDown, Scale,
 } from 'lucide-react';
 
-const ACCENT = '#22ab94';
-const MUTED = '#6b7280';
+// Colors flow through the app's CSS variables (globals.css) so the rail
+// follows the same dark theme as the rest of the terminal; the blue accent
+// is the app's standard selection tint (same as .tf-btn.on / .pill).
+const ACTIVE_BG = 'rgba(77,124,254,.14)';
+const ACTIVE_COLOR = '#4D7CFE';
+const HOVER_BG = 'rgba(255,255,255,.06)';
+const HOVER_ON = 'rgba(77,124,254,.06)';
 
 // TradingView-style left rail: one icon per group; multi-tool groups open a
 // flyout to the right, single-tool groups select immediately.
@@ -82,8 +87,8 @@ export default function TVLeftToolbar({ tool, setTool }) {
         width: 44,
         flexShrink: 0,
         alignSelf: 'flex-start',
-        background: '#ffffff',
-        border: '1px solid #e5e7eb',
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
         borderRadius: 8,
         fontFamily: 'Inter, sans-serif',
       }}>
@@ -102,14 +107,14 @@ export default function TVLeftToolbar({ tool, setTool }) {
                   borderRadius: 4,
                   display: 'grid',
                   placeItems: 'center',
-                  background: active ? 'rgba(34,171,148,0.12)' : 'transparent',
-                  color: active ? ACCENT : MUTED,
+                  background: active ? ACTIVE_BG : 'transparent',
+                  color: active ? ACTIVE_COLOR : 'var(--muted)',
                   border: 'none',
                   cursor: 'pointer',
                   transition: 'background 0.1s',
                   position: 'relative',
                 }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = HOVER_BG; }}
                 onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
               >
                 <Icon size={18} strokeWidth={1.8} />
@@ -122,7 +127,7 @@ export default function TVLeftToolbar({ tool, setTool }) {
                     height: 0,
                     borderLeft: '3px solid transparent',
                     borderRight: '3px solid transparent',
-                    borderBottom: `3px solid ${active ? ACCENT : '#b2b5be'}`,
+                    borderBottom: `3px solid ${active ? ACTIVE_COLOR : 'var(--dim)'}`,
                   }} />
                 )}
               </button>
@@ -143,10 +148,10 @@ export default function TVLeftToolbar({ tool, setTool }) {
               top: flyoutPos.top,
               width: 200,
               zIndex: 200,
-              background: '#ffffff',
-              border: '1px solid #e0e3eb',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
               borderRadius: 6,
-              boxShadow: '0 6px 20px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.05)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)',
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
@@ -159,13 +164,13 @@ export default function TVLeftToolbar({ tool, setTool }) {
               fontWeight: 700,
               letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              color: '#b2b5be',
-              borderBottom: '1px solid #f0f1f5',
+              color: 'var(--dim)',
+              borderBottom: '1px solid var(--line2)',
               flexShrink: 0,
             }}>
               {group.label}
             </div>
-            <div style={{ maxHeight: 300, overflowY: 'auto', overflowX: 'hidden', padding: '4px 0' }}>
+            <div className="td-toolbar" style={{ maxHeight: 300, overflowY: 'auto', overflowX: 'hidden', padding: '4px 0' }}>
               {group.tools.map(([id, ToolIcon, label]) => {
                 const on = id === tool;
                 return (
@@ -181,13 +186,13 @@ export default function TVLeftToolbar({ tool, setTool }) {
                       textAlign: 'left',
                       padding: '7px 12px',
                       fontSize: 12,
-                      color: on ? '#ffffff' : '#222222',
-                      background: on ? ACCENT : 'transparent',
+                      color: on ? '#ffffff' : 'var(--text)',
+                      background: on ? ACTIVE_COLOR : 'transparent',
                       border: 'none',
                       cursor: 'pointer',
                       transition: 'background 0.08s',
                     }}
-                    onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = on ? ACCENT : 'rgba(34,171,148,0.06)'; }}
+                    onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = HOVER_ON; }}
                     onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}
                   >
                     <span style={{ width: 16, display: 'grid', placeItems: 'center', flexShrink: 0 }}>

@@ -19,7 +19,8 @@ function makeQty(price, i, bucket) {
 // Order Book — live L2 depth ladder synthesized around the LTP (the demo
 // relay only streams spot/chain trades, so depth is modeled, but bids/asks
 // update on every price tick). Best bid & best ask rows are highlighted.
-export default function OrderBook({ token, kind }) {
+// `showBidAsk={false}` hides the price columns (used by /tv-chart).
+export default function OrderBook({ token, kind, showBidAsk = true }) {
   const quote = usePrice(token);
   const ltp = quote.ltp;
 
@@ -68,20 +69,20 @@ export default function OrderBook({ token, kind }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
         {/* Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', background: '#f8f9fa', borderBottom: '1px solid #e0e3eb', flexShrink: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: showBidAsk ? '1fr 1fr 1fr 1fr' : '1fr 1fr', background: '#f8f9fa', borderBottom: '1px solid #e0e3eb', flexShrink: 0 }}>
           <span style={th}>Bid Qty</span>
-          <span style={{ ...th, textAlign: 'right' }}>Bid Price</span>
-          <span style={{ ...th, textAlign: 'right' }}>Ask Price</span>
+          {showBidAsk && <span style={{ ...th, textAlign: 'right' }}>Bid Price</span>}
+          {showBidAsk && <span style={{ ...th, textAlign: 'right' }}>Ask Price</span>}
           <span style={{ ...th, textAlign: 'right' }}>Ask Qty</span>
         </div>
 
         {/* Ladder: N bid rows under N ask rows (top = best) */}
         <div className="terminal-scroll" style={{ flex: 1, overflowY: 'auto' }}>
           {[...book.asks].reverse().map((ask, i) => (
-            <LadderRow key={`a-${i}`} side="ask" isBest={ask.price === book.bestAsk} price={ask.price} qty={ask.qty} />
+            <LadderRow key={`a-${i}`} side="ask" isBest={ask.price === book.bestAsk} price={ask.price} qty={ask.qty} showBidAsk={showBidAsk} />
           ))}
           {[...book.bids].map((bid, i) => (
-            <LadderRow key={`b-${i}`} side="bid" isBest={bid.price === book.bestBid} price={bid.price} qty={bid.qty} />
+            <LadderRow key={`b-${i}`} side="bid" isBest={bid.price === book.bestBid} price={bid.price} qty={bid.qty} showBidAsk={showBidAsk} />
           ))}
         </div>
       </div>
@@ -89,13 +90,13 @@ export default function OrderBook({ token, kind }) {
   );
 }
 
-function LadderRow({ side, isBest, price, qty }) {
+function LadderRow({ side, isBest, price, qty, showBidAsk = true }) {
   const bid = side === 'bid';
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr 1fr 1fr',
+        gridTemplateColumns: showBidAsk ? '1fr 1fr 1fr 1fr' : '1fr 1fr',
         fontVariantNumeric: 'tabular-nums',
         fontSize: 11,
         borderBottom: '1px solid #f1f2f6',
@@ -111,8 +112,8 @@ function LadderRow({ side, isBest, price, qty }) {
         pointerEvents: 'none',
       }} />
       <span style={{ ...cellStyle, color: bid ? '#222222' : 'transparent' }}>{fmtQty(qty)}</span>
-      <span style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: bid ? '#26a69a' : 'transparent' }}>{fmtNum(price)}</span>
-      <span style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: !bid ? '#ef5350' : 'transparent' }}>{fmtNum(price)}</span>
+      {showBidAsk && <span style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: bid ? '#26a69a' : 'transparent' }}>{fmtNum(price)}</span>}
+      {showBidAsk && <span style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: !bid ? '#ef5350' : 'transparent' }}>{fmtNum(price)}</span>}
       <span style={{ ...cellStyle, textAlign: 'right', color: !bid ? '#222222' : 'transparent' }}>{fmtQty(qty)}</span>
     </div>
   );

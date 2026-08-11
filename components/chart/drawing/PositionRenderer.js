@@ -31,20 +31,21 @@ export function renderPosition(ctx, drawing, transform) {
   const theme = themeTokens();
   const style = drawing.style || {};
   const color = style.color || positionColorFor(drawing.drawingType);
-  const width = ctx.canvas.width;
   const lineWidth = style.lineWidth || 1.5;
   const fillOpacity = style.opacity ?? 0.14;
   const pillBg = theme.alpha(theme.card, 0.85);
+  const left = zones.left;
+  const right = zones.right;
 
-  // Profit + risk zones (full width, below the lines).
+  // Profit + risk zones (bounded by the anchors' x-extent, below the lines).
   ctx.save();
   if (zones.rewardBottom > zones.rewardTop) {
     ctx.globalAlpha = fillOpacity; ctx.fillStyle = theme.green;
-    ctx.fillRect(0, zones.rewardTop, width, zones.rewardBottom - zones.rewardTop);
+    ctx.fillRect(left, zones.rewardTop, right - left, zones.rewardBottom - zones.rewardTop);
   }
   if (zones.riskBottom > zones.riskTop) {
     ctx.globalAlpha = fillOpacity; ctx.fillStyle = theme.red;
-    ctx.fillRect(0, zones.riskTop, width, zones.riskBottom - zones.riskTop);
+    ctx.fillRect(left, zones.riskTop, right - left, zones.riskBottom - zones.riskTop);
   }
   ctx.restore();
 
@@ -52,7 +53,7 @@ export function renderPosition(ctx, drawing, transform) {
   ctx.lineWidth = lineWidth;
   const line = (y, stroke, dash) => {
     ctx.save(); ctx.strokeStyle = stroke; ctx.setLineDash(dash || []);
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
     ctx.restore();
   };
   line(zones.entry.y, color, []);
@@ -60,7 +61,7 @@ export function renderPosition(ctx, drawing, transform) {
   if (Math.abs(zones.tp.y - zones.entry.y) > 1) line(zones.tp.y, theme.green, [6, 4]);
 
   if (style.showLabels !== false) {
-    const side = width - 8;
+    const side = right - 8;
     ctx.textAlign = 'right';
     labelPill(ctx, `ENTRY ${fmtPrice(calc.entry)}`, side, zones.entry.y, 'right', pillBg, color);
     if (Math.abs(zones.sl.y - zones.entry.y) > 1) labelPill(ctx, `SL ${fmtPrice(calc.sl)}`, side, zones.sl.y, 'right', pillBg, theme.red);
@@ -70,12 +71,12 @@ export function renderPosition(ctx, drawing, transform) {
     const tag = calc.isLong ? 'LONG' : 'SHORT';
     const text = `${tag}  ${fmtMoney(calc.riskAmount)}${calc.riskPercent != null ? ` (${fmtPercent(calc.riskPercent)})` : ''}`;
     ctx.textAlign = 'left';
-    labelPill(ctx, text, 8, zones.entry.y, 'left', pillBg, color);
+    labelPill(ctx, text, left + 8, zones.entry.y, 'left', pillBg, color);
   }
   if (style.showRR !== false) {
     const text = `${fmtRR(calc.rr)}  ${fmtMoney(calc.rewardAmount)}`;
     ctx.textAlign = 'right';
-    labelPill(ctx, text, width - 8, zones.top - 18, 'right', pillBg, theme.text);
+    labelPill(ctx, text, right - 8, zones.top - 18, 'right', pillBg, theme.text);
   }
 }
 

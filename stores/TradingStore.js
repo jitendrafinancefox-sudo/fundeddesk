@@ -443,6 +443,7 @@ export const TradingStore = {
       tp: tp == null || tp === '' ? null : Number(tp),
     } : pos));
     emit('positions');
+    persist();
   },
 
   addAlert(alert) {

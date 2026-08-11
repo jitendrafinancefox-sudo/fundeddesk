@@ -56,18 +56,18 @@ export default function BuySellOverlay({ exchange = 'NSE', token, symbol, underl
       <button
         title={`SELL ${symbol}`}
         onClick={() => place('SELL')}
-        style={{ ...btnBase, background: '#f23645' }}
+        style={{ ...btnBase, background: 'var(--red)' }}
       >
         <span style={{ fontSize: 9, opacity: 0.85, fontWeight: 600 }}>SELL</span>
         <span>{bid != null ? bid.toFixed(2) : '—'}</span>
       </button>
-      <span style={{ fontSize: 10, color: '#6b7280', fontFamily: 'Inter, sans-serif', minWidth: 34, textAlign: 'center' }}>
+      <span style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'Inter, sans-serif', minWidth: 34, textAlign: 'center' }}>
         {spread != null ? spread.toFixed(2) : '—'}
       </span>
       <button
         title={`BUY ${symbol}`}
         onClick={() => place('BUY')}
-        style={{ ...btnBase, background: '#2962ff' }}
+        style={{ ...btnBase, background: 'var(--blue)' }}
       >
         <span style={{ fontSize: 9, opacity: 0.85, fontWeight: 600 }}>BUY</span>
         <span>{ask != null ? ask.toFixed(2) : '—'}</span>

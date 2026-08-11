@@ -446,8 +446,8 @@ function renderChannel(ctx, drawing, transform) {
   const color = style.color || themeTokens().accent;
   const lineWidth = style.lineWidth || 1.5;
   const dash = style.dash ? [6, 4] : [];
-  const extendLeft = style.extendLeft !== false;
-  const extendRight = style.extendRight !== false;
+  const extendLeft = style.extendLeft === true;
+  const extendRight = style.extendRight === true;
   ctx.save();
   ctx.strokeStyle = color; ctx.fillStyle = color;
   const strokeLine = (a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };

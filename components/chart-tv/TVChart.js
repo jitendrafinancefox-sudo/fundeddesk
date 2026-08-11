@@ -1,4 +1,4 @@
-import { createChart, LineSeries, HistogramSeries } from 'lightweight-charts';
+import { createChart, LineSeries, HistogramSeries, LineStyle } from 'lightweight-charts';
 import { marketData } from '@/services/marketData';
 import { normalizeCandles } from '@/services/candleAggregator';
 import { TV_LIGHT_THEME, buildChartOptions, buildCandleSeriesOptions, applyTimeframeOptions } from './TVChartTheme';
@@ -12,6 +12,17 @@ import {
 import { attachResize, resizeToContainer } from './TVChartResize';
 import { bindChartEvents } from './TVChartEvents';
 import { createCrosshairRegistry } from './TVChartCrosshair';
+
+// True when two price-line defs produce the same visual line (price, label
+// text, color and stroke). Used to reuse existing line instances instead of
+// removing/recreating them on every live-tick re-apply.
+function sameLevel(a, b) {
+  return a.price === b.price
+    && a.title === b.title
+    && a.color === b.color
+    && a.lineWidth === b.lineWidth
+    && a.lineStyle === b.lineStyle;
+}
 
 export class TVChart {
   constructor(container, options = {}) {
@@ -28,6 +39,9 @@ export class TVChart {
     this.crosshair = createCrosshairRegistry();
     this._disposers = [];
     this._fetchController = null;
+    this._levelPreview = null;
+    this._retries = 2;
+    this._retryDelay = 2000;
     this._init();
   }
 
@@ -143,19 +157,27 @@ export class TVChart {
     const controller = new AbortController();
     this._fetchController = controller;
     const signal = externalSignal || controller.signal;
-    try {
-      const rows = await marketData.history(
-        this.symbol.exchange,
-        this.symbol.token,
-        relayInterval,
-        signal,
-      );
-      this.setCandles(rows);
-      return this;
-    } catch (error) {
-      if (error?.name !== 'AbortError') this.onError?.(error);
-      throw error;
+    let lastError = null;
+    for (let attempt = 0; attempt <= this._retries; attempt += 1) {
+      try {
+        const rows = await marketData.history(
+          this.symbol.exchange,
+          this.symbol.token,
+          relayInterval,
+          signal,
+        );
+        this.setCandles(rows);
+        return this;
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+        lastError = error;
+        if (attempt < this._retries && signal && !signal.aborted) {
+          await new Promise((resolve) => setTimeout(resolve, this._retryDelay));
+        }
+      }
     }
+    this.onError?.(lastError);
+    throw lastError;
   }
 
   fitContent() {
@@ -177,11 +199,15 @@ export class TVChart {
   }
 
   priceToCoordinate(price) {
-    return this.series.priceScale().priceToCoordinate(price);
+    return this.series.priceToCoordinate(price);
   }
 
   coordinateToPrice(y) {
-    return this.series.priceScale().coordinateToPrice(y);
+    return this.series.coordinateToPrice(y);
+  }
+
+  getContainer() {
+    return this.container;
   }
 
   timeToCoordinate(time) {
@@ -230,10 +256,114 @@ export class TVChart {
     return toTVTimeframe(relayCode);
   }
 
+  // Compare overlay (ported from the terminal's Compare popover, rebuilt as a
+  // true normalized overlay): fetch the compared symbol's history and plot a
+  // line on the SAME pane/axis as the candles, re-based so it starts exactly
+  // at the main chart's first close (0% deviation → overlapping gridlines).
+  async setCompareOverlay({ exchange, token, symbol, interval }, signal) {
+    const relayInterval = resolveRelayInterval(interval || 'FIVE_MINUTE');
+    this.removeCompareSeries();
+    const base = this.candles[0]?.close ?? 100;
+    const rows = normalizeCandles(await marketData.history(exchange, token, relayInterval, signal));
+    const first = rows.find((r) => r.close != null)?.close ?? base;
+    const points = rows.filter((r) => r.close != null).map((r) => ({
+      time: r.time,
+      value: base * (Number(r.close) / first),
+    }));
+    if (!points.length) throw new Error(`no data for compare symbol ${symbol}`);
+    const series = this.chart.addSeries(LineSeries, {
+      color: '#f0b90b',
+      lineWidth: 1.5,
+      priceScaleId: 'right',
+      lastValueVisible: true,
+      priceLineVisible: false,
+      crosshairMarkerVisible: true,
+      paneIndex: 0,
+    });
+    series.setData(points);
+    this._compareSeries = series;
+    this._compare = { exchange, token, symbol };
+    return this;
+  }
+
+  removeCompareSeries() {
+    if (this._compareSeries) {
+      try { this._compareSeries.remove(); } catch { /* already removed */ }
+    }
+    this._compareSeries = null;
+    this._compare = null;
+    return this;
+  }
+
+  getCompareSymbol() {
+    return this._compare?.symbol || null;
+  }
+
+  // SL/TP + entry lines for open positions (ported from the old terminal,
+  // rebuilt on lightweight-charts' native price lines). The caller re-applies
+  // the full set on position changes and live ticks, so the P&L labels stay
+  // current — lines whose definition is unchanged are REUSED (not removed
+  // and recreated), so a live tick that touched nothing keeps the same
+  // underlying price-line instances. Line styles: dashed for the SL/TP
+  // brackets, solid for the entry line.
+  setLevelLines(lines = []) {
+    for (const pl of this._levelLines || []) {
+      try { this.series.removePriceLine(pl); } catch { /* already removed */ }
+    }
+    this._levelLines = [];
+    if (!this.series) return this;
+    for (const def of lines) {
+      if (def == null || def.price == null) continue;
+      const pl = this.series.createPriceLine({
+        price: def.price,
+        title: def.title || '',
+        color: def.color || '#8895aa',
+        lineWidth: def.lineWidth || 1,
+        lineStyle: def.lineStyle ?? LineStyle.Dashed,
+        axisLabelVisible: true,
+        titleVisible: true,
+        lineVisible: true,
+      });
+      this._levelLines.push(pl);
+    }
+    return this;
+  }
+
+    // Transient price line for drag previews (SL/TP handles on the entry bar).
+  // Lives outside _levelLines so the committed label set is untouched; the
+  // caller clears it on drag end.
+  setLevelPreview(def = null) {
+    this.clearLevelPreview();
+    if (!def || def.price == null) return this;
+    const pl = this.series.createPriceLine({
+      price: def.price,
+      title: def.title || '',
+      color: def.color || '#8895aa',
+      lineWidth: 1,
+      lineStyle: def.lineStyle ?? LineStyle.Dashed,
+      axisLabelVisible: true,
+      titleVisible: true,
+      lineVisible: true,
+    });
+    this._levelPreview = pl;
+    return this;
+  }
+
+  clearLevelPreview() {
+    if (this._levelPreview) {
+      try { this.series.removePriceLine(this._levelPreview); } catch { /* already removed */ }
+      this._levelPreview = null;
+    }
+    return this;
+  }
+
   destroy() {
     this._fetchController?.abort();
     this._indicatorSeries?.forEach((series) => { try { series.remove(); } catch { /* already removed */ } });
     this._indicatorSeries = [];
+    this.removeCompareSeries();
+    this.clearLevelPreview();
+    this.setLevelLines([]);
     this._disposers.forEach((dispose) => {
       try {
         dispose();

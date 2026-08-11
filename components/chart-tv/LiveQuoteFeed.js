@@ -15,7 +15,11 @@ function push(token, ltp) {
   PriceBus.set(token, { ltp: p, bid: p - TICK, ask: p + TICK, change: null, prevClose: null });
 }
 
-export default function LiveQuoteFeed({ live, baselineFor }) {
+// Real relay spot feed: polls /api/health (the relay's actual index values,
+// every 2s — the relay's own update cadence) and pushes into the PriceBus.
+// This is the SAME source BuySellOverlay and InstrumentCard display, and the
+// same bus /tv-chart's candle tick wiring consumes. No fabricated movement.
+export default function LiveQuoteFeed({ baselineFor }) {
   const baseline = useRef(baselineFor);
   baseline.current = baselineFor;
 
@@ -36,19 +40,6 @@ export default function LiveQuoteFeed({ live, baselineFor }) {
     const id = setInterval(poll, 2000);
     return () => { mounted = false; clearInterval(id); controller.abort(); };
   }, []);
-
-  useEffect(() => {
-    if (!live) return undefined;
-    const id = setInterval(() => {
-      PAIRS.forEach((p) => {
-        const cur = PriceBus.get(p.token)?.ltp;
-        const base = cur != null ? cur : baseline.current?.(p.key);
-        if (base == null) return;
-        push(p.token, base * (1 + (Math.random() - 0.48) * 0.003));
-      });
-    }, 1500);
-    return () => clearInterval(id);
-  }, [live]);
 
   return null;
 }

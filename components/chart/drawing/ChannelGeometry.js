@@ -173,8 +173,8 @@ export function channelHitTest(drawing, point, transform, threshold = 7) {
   const geo = channelGeometry(drawing, transform);
   if (!geo) return false;
   const style = drawing.style || {};
-  const extendLeft = style.extendLeft !== false;
-  const extendRight = style.extendRight !== false;
+  const extendLeft = style.extendLeft === true;
+  const extendRight = style.extendRight === true;
   const lineHit = (a, b) => distanceToSegment(point, a, b) <= threshold;
   if (geo.type === 'parallelChannel' || geo.type === 'regressionChannel') {
     if (!geo.offA) return lineHit(geo.baseA, geo.baseB);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TVChartContainer from '@/components/chart-tv/TVChartContainer';
 import { TV_TIMEFRAME_LABELS, resolveRelayInterval } from '@/components/chart-tv/TVChartSeries';
 import ChartContextMenu from '@/components/chart/ui/ChartContextMenu';
@@ -9,12 +9,14 @@ import DrawingFlyout from '@/components/chart/ui/DrawingFlyout';
 import TVLeftToolbar from '@/components/chart-tv/TVLeftToolbar';
 import LiveQuoteFeed from '@/components/chart-tv/LiveQuoteFeed';
 import BuySellOverlay from '@/components/chart-tv/BuySellOverlay';
+import EntryBar from '@/components/chart-tv/EntryBar';
 import InstrumentCard from '@/components/chart-tv/InstrumentCard';
 import OptionChainModal from '@/components/terminal/OptionChainModal';
 import IndicatorMenu from '@/components/terminal/IndicatorMenu';
 import AlertNotifications from '@/components/terminal/AlertNotifications';
 import AccountManager from '@/components/terminal/AccountManager';
 import PositionManager from '@/components/terminal/PositionManager';
+import TradeHistory from '@/components/terminal/TradeHistory';
 import Watchlist from '@/components/terminal/Watchlist';
 import OrderPanel from '@/components/terminal/OrderPanel';
 import OrderBook from '@/components/terminal/OrderBook';
@@ -24,21 +26,49 @@ import StatusBar from '@/components/terminal/StatusBar';
 import DrawingManagerPanel from '@/components/chart/ui/DrawingManagerPanel';
 import TVChartHotkeys from '@/components/chart-tv/TVChartHotkeys';
 import { TV_DARK_THEME, TV_LIGHT_THEME } from '@/components/chart-tv/TVChartTheme';
-import { INDEX_TOKEN } from '@/components/terminal/constants';
+import { INDEX_TOKEN, IS_MARKET_OPEN } from '@/components/terminal/constants';
 import { marketData } from '@/services/marketData';
 import { supabase } from '@/lib/supabaseClient';
 import { useMarketData } from '@/hooks/useMarketData';
 import { PriceBus } from '@/stores/PriceBus';
-import { TradingStore } from '@/stores/TradingStore';
+import { TradingStore, useTradeState } from '@/stores/TradingStore';
+import { pnlAt, signedINR } from '@/components/chart-tv/levelPnl';
 import { isZoneType, isChannelType, isStrokeType, isPositionType, isTextType } from '@/components/chart/drawing/DrawingDefinitions';
+import { Square, Columns2, Columns3, Columns4, GitCompare, Magnet, Undo2, Redo2, Trash2, Sprout, Bell, ListTree, Moon, Sun, Maximize2, Minimize2 } from 'lucide-react';
 
 const CHARTS = [
   { key: 'a', label: 'NIFTY', token: '99926000', underlying: 'NIFTY' },
   { key: 'b', label: 'BANKNIFTY', token: '99926009', underlying: 'BANKNIFTY' },
 ];
 
-const toolStyle = { padding: '5px 10px', fontSize: 11, fontFamily: 'Inter, sans-serif', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--muted)', cursor: 'pointer' };
-const toolActive = { ...toolStyle, background: '#22ab94', border: '1px solid #22ab94', color: '#ffffff' };
+// Layout system (ported semantics from the terminal's paneOps): panel slots
+// are fixed keys 'a'..'d'; the current layout counts how many are visible.
+// Shrinking keeps the first N panels; growing re-adds the next slots (their
+// drawings restore from localStorage via the overlay serialization).
+const PANEL_ORDER = ['a', 'b', 'c', 'd'];
+const PANEL_DEF = { a: CHARTS[0], b: CHARTS[1], c: CHARTS[0], d: CHARTS[1] };
+const LAYOUT_GRID = {
+  1: { gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)' },
+  2: { gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)' },
+  3: { gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)' },
+  4: { gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr) minmax(0, 1fr)' },
+};
+
+// Shared chrome styles — all colors flow through the app's CSS variables
+// (globals.css), so the page matches the dark theme of the rest of the app
+// and follows the site-wide light-theme-class toggle automatically.
+const toolStyle = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+  height: 26, padding: '0 8px', fontSize: 11, fontFamily: 'Inter, sans-serif',
+  fontWeight: 600,
+  border: '1px solid transparent', borderRadius: 5,
+  background: 'transparent', color: 'var(--muted)',
+  cursor: 'pointer', transition: 'background .12s, color .12s',
+  whiteSpace: 'nowrap',
+};
+const toolActive = { ...toolStyle, background: 'rgba(77,124,254,.14)', borderColor: 'rgba(77,124,254,.35)', color: '#4D7CFE' };
+const iconBtn = { ...toolStyle, width: 28, padding: 0 };
+const iconActive = { ...iconBtn, background: 'rgba(77,124,254,.14)', borderColor: 'rgba(77,124,254,.35)', color: '#4D7CFE' };
 
 const QUICK_TIMEFRAMES = ['1m', '5m', '15m', '1h', '1D'].map((tv) => ({ tv, relay: resolveRelayInterval(tv), label: TV_TIMEFRAME_LABELS[tv] }));
 
@@ -50,21 +80,31 @@ const loadTvChartState = () => { try { return JSON.parse(localStorage.getItem(TV
 export default function TVOverlayPage() {
   const rootsRef = useRef({});
   const chartsRef = useRef({});
+  const handledRoots = useRef(new Set());   // panel keys whose hydrate pass is complete
+  const restoredRoots = useRef(new WeakSet()); // per-root restore-once guard (new root mount = fresh restore)
   const [activeKey, setActiveKey] = useState('a');
+  const [layout, setLayout] = useState(2);
+  const [panelKeys, setPanelKeys] = useState(PANEL_ORDER.slice(0, 2));
+  const panelKeysRef = useRef(panelKeys);
+  panelKeysRef.current = panelKeys;
   const [tool, setTool] = useState('cursor');
   const [intervals, setIntervals] = useState(() => {
     const saved = loadTvChartState();
-    return { a: saved?.intervals?.a || 'FIVE_MINUTE', b: saved?.intervals?.b || 'FIVE_MINUTE' };
+    const out = {};
+    PANEL_ORDER.forEach((k) => { out[k] = saved?.intervals?.[k] || 'FIVE_MINUTE'; });
+    return out;
   });
   const [instruments, setInstruments] = useState(() => {
     const saved = loadTvChartState();
-    return { a: saved?.a || indexInstrument(CHARTS[0]), b: saved?.b || indexInstrument(CHARTS[1]) };
+    const out = {};
+    PANEL_ORDER.forEach((k) => { out[k] = saved?.[k] || indexInstrument(PANEL_DEF[k]); });
+    return out;
   });
-  const [indicators, setIndicators] = useState({ a: [], b: [] });
+  const [indicators, setIndicators] = useState(PANEL_ORDER.reduce((m, k) => ({ ...m, [k]: [] }), {}));
   const [chainPanel, setChainPanel] = useState(null);
   const [magnet, setMagnet] = useState(true);
-  const [selectedCount, setSelectedCount] = useState({ a: 0, b: 0 });
-  const [counts, setCounts] = useState({ a: 0, b: 0 });
+  const [selectedCount, setSelectedCount] = useState(PANEL_ORDER.reduce((m, k) => ({ ...m, [k]: 0 }), {}));
+  const [counts, setCounts] = useState(PANEL_ORDER.reduce((m, k) => ({ ...m, [k]: 0 }), {}));
   const [menu, setMenu] = useState(null);       // { chart, x, y, id, bounds }
   const [properties, setProperties] = useState(null); // { chart, id }
   const [flyout, setFlyout] = useState(null);   // { chart, x, y, id }
@@ -78,7 +118,17 @@ export default function TVOverlayPage() {
   const [dockTab, setDockTab] = useState('positions'); // 'account' | 'positions' | 'book'
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [objectsOpen, setObjectsOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compare, setCompare] = useState(PANEL_ORDER.reduce((m, k) => ({ ...m, [k]: null }), {}));
+  // Start in sync with the site-wide theme (ThemeToggle applies the .light-theme
+  // class from localStorage before this page mounts; the icon then corrects
+  // itself after hydration without a server/client mismatch).
   const [dark, setDark] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    setDark(document.documentElement.classList.contains('light-theme'));
+  }, []);
   const [relayStatus, setRelayStatus] = useState('connecting'); // relay health for StatusBar
   const objectsApiRef = useRef({ current: null });
   const chainN = useMarketData('NIFTY');
@@ -123,16 +173,37 @@ export default function TVOverlayPage() {
     Object.values(chartsRef.current).forEach((chart) => chart?.setTheme?.(dark ? TV_DARK_THEME : TV_LIGHT_THEME));
   }, [dark]);
 
+  // Fullscreen button state follows the browser (so Esc still exits cleanly).
+  useEffect(() => {
+    const sync = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
   // Persist each panel's instrument + timeframe across reloads (same
   // localStorage pattern drawingPersistence uses — no new storage layer).
   useEffect(() => {
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(TVCHART_STATE_KEY, JSON.stringify({ a: instruments.a, b: instruments.b, intervals }));
+        localStorage.setItem(TVCHART_STATE_KEY, JSON.stringify({ ...instruments, intervals }));
       } catch {}
     }, 300);
     return () => clearTimeout(t);
   }, [instruments, intervals]);
+
+  // Layout switcher (1/2/3/4 panels). Shrinking keeps the first N panels;
+  // growing re-attaches the next slots. Removed panels drop their session
+  // "seeded" flags so a later re-add restores + reseeds that chart fresh.
+  const changeLayout = (count) => {
+    const next = Math.max(1, Math.min(4, count));
+    PANEL_ORDER.slice(next).forEach((k) => {
+      sessionStorage.removeItem(`fd-seed-${rootsRef.current[k]?.chartKey || `tv-overlay-${k}`}`);
+      handledRoots.current.delete(k);
+    });
+    if (!PANEL_ORDER.slice(0, next).includes(activeKey)) setActiveKey(next > 0 ? PANEL_ORDER[0] : 'a');
+    setLayout(next);
+    setPanelKeys(PANEL_ORDER.slice(0, next));
+  };
 
   // Point the objects-tree panel at the ACTIVE panel's overlay root.
   useEffect(() => {
@@ -252,6 +323,114 @@ export default function TVOverlayPage() {
     })();
   };
 
+  // Compare popover contents — same symbol universe the Watchlist uses
+  // (indices + saved watchlist rows), enriched with live ltp/change the way
+  // the old terminal's compareItems did (chain/spot price for indices, the
+  // heatmap quote for stocks). The active panel's own instrument is excluded.
+  const compareItems = useMemo(() => {
+    const inst = instruments[activeKey];
+    return displayedItems
+      .filter((i) => i.token !== inst?.token)
+      .map((i) => {
+        const q = stockQuotes[i.token];
+        return {
+          ...i,
+          ltp: prices[i.token] != null ? prices[i.token] : (q?.ltp ?? null),
+          change: i.kind === 'index' ? null : (q?.change ?? null),
+        };
+      });
+  }, [displayedItems, stockQuotes, prices, instruments, activeKey]);
+
+  const applyCompare = async (item) => {
+    const key = activeKey;
+    const chart = chartsRef.current[key];
+    if (!chart || !instruments[key]) return;
+    if (item.token === instruments[key].token) { setCompareOpen(false); return; }
+    try {
+      await chart.setCompareOverlay({
+        exchange: item.exchange,
+        token: item.token,
+        symbol: item.symbol_label,
+        interval: intervals[key],
+      });
+      setCompare((prev) => ({ ...prev, [key]: item.symbol_label }));
+      setCompareOpen(false);
+    } catch (error) {
+      console.warn('compare failed', key, error);
+    }
+  };
+
+  const clearCompare = (key) => {
+    chartsRef.current[key]?.removeCompareSeries();
+    setCompare((prev) => ({ ...prev, [key]: null }));
+  };
+
+  useEffect(() => {
+    if (!compareOpen) return undefined;
+    const away = (e) => { if (!e.target.closest?.('[data-compare-popover], [data-compare-btn]')) setCompareOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setCompareOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [compareOpen]);
+
+  // SL/TP + entry lines on each panel for positions open on that panel's
+  // instrument, using the shared trading P&L formula
+  // (level - avgPrice) * dir * qty (same math as PositionManager). The entry
+  // line is blue solid at avgPrice (the line the EntryBar control bar sits
+  // on); SL is a red dashed line and TP green dashed, each label carrying
+  // the P&L amount at that level. All three are constant at fixed levels, so
+  // setLevelLines reuses the underlying line instances across live ticks.
+  const applyLevelLines = useCallback((key) => {
+    const inst = instruments[key];
+    const chart = chartsRef.current[key];
+    if (!inst || !chart?.setLevelLines) return;
+    const lines = [];
+    for (const p of TradingStore.getSnapshot('positions') || []) {
+      if (String(p.token) !== String(inst.token)) continue;
+      if (p.sl != null) {
+        lines.push({
+          price: p.sl,
+          title: `SL ${signedINR(pnlAt(p.sl, p))}`,
+          color: '#ef5350',
+          lineStyle: 2,
+        });
+      }
+      if (p.tp != null) {
+        lines.push({
+          price: p.tp,
+          title: `TP ${signedINR(pnlAt(p.tp, p))}`,
+          color: '#26a69a',
+          lineStyle: 2,
+        });
+      }
+      lines.push({
+        price: p.avgPrice,
+        title: `${p.side} ${p.qty} @ ${Number(p.avgPrice).toFixed(2)}`,
+        color: '#2962ff',
+        lineStyle: 0,
+      });
+    }
+    chart.setLevelLines(lines);
+  }, [instruments]);
+
+  // Apply on open/close/SL-TP edit (each replaces the positions slice, so
+  // the subscription re-renders) and on instrument/layout changes.
+  const positionsSlice = useTradeState('positions');
+  useEffect(() => {
+    for (const key of panelKeys) applyLevelLines(key);
+  }, [applyLevelLines, panelKeys, positionsSlice]);
+
+  // Live price ticks mutate position.currentPrice in place (same slice
+  // reference), so the current-price P&L label re-applies via PriceBus.
+  useEffect(() => {
+    const off = PriceBus.onAll(() => {
+      if (!TradingStore.getSnapshot('positions')?.length) return;
+      for (const key of panelKeys) applyLevelLines(key);
+    });
+    return off;
+  }, [applyLevelLines, panelKeys]);
+
   // The chart canvases cover nearly the whole viewport and consume plain
   // mouse-wheel events (pan/zoom), so the page itself becomes unreachable by
   // scrolling. Route plain wheels over a chart to the page instead; keep
@@ -301,6 +480,10 @@ export default function TVOverlayPage() {
       setCounts((prev) => ({ ...prev, [panel]: target.length }));
     }
     setInstruments((prev) => ({ ...prev, [panel]: next }));
+    // A new main symbol re-bases the chart: drop any compare overlay (its
+    // 0% anchor would no longer line up with the new series).
+    chartsRef.current[panel]?.removeCompareSeries();
+    setCompare((prev) => ({ ...prev, [panel]: null }));
   };
 
   // Map a watchlist item onto this page's instrument shape (mirrors the old
@@ -384,20 +567,45 @@ export default function TVOverlayPage() {
     Object.values(rootsRef.current).forEach((root) => root?.configureSnap({ magnet, mode: 'ohlc' }));
   }, [magnet]);
 
+  // Real live ticks → the current bucket's candle on each panel. Ticks come
+  // from the SAME feed BuySellOverlay/InstrumentCard display: LiveQuoteFeed
+  // polls the relay /api/health every 2s and pushes real index spot into the
+  // PriceBus, and option-chain LTPs mirror in from useMarketData's 1.5s poll
+  // for strike charts. Each tick bucketed with the same floor(tick/seconds)
+  // logic the history aggregation uses (candleAggregator.aggregateTick) and
+  // applied via TVChart.updateCandle: same bucket → in-place close/high/low;
+  // rolled bucket (market just opened a new period) → fresh candle at the
+  // LTP; stale/earlier ticks ignored. Gated by IS_MARKET_OPEN — closed
+  // sessions have no fresh relay values, so no candle moves on its own.
   useEffect(() => {
     if (!live) return undefined;
-    const timer = setInterval(() => {
-      const chart = chartsRef.current.a;
-      const root = rootsRef.current.a;
-      if (!chart || !root) return;
-      const last = chart.getLastCandle();
-      if (!last) return;
-      const drift = (Math.random() - 0.48) * 0.003;
-      const close = Number((last.close * (1 + drift)).toFixed(2));
-      chart.updateCandle({ ...last, high: Math.max(last.high, close), low: Math.min(last.low, close), close });
-    }, 1500);
-    return () => clearInterval(timer);
-  }, [live]);
+    const secondsFor = (interval) => ({
+      ONE_MINUTE: 60, THREE_MINUTE: 180, FIVE_MINUTE: 300,
+      FIFTEEN_MINUTE: 900, ONE_HOUR: 3600, FOUR_HOUR: 14400, ONE_DAY: 86400,
+    }[interval] || 300);
+    const off = PriceBus.onAll((token, quote) => {
+      if (!IS_MARKET_OPEN()) return;
+      const ltp = quote?.ltp;
+      if (ltp == null || !Number.isFinite(Number(ltp))) return;
+      const tokenStr = String(token);
+      panelKeys.forEach((key) => {
+        const chart = chartsRef.current[key];
+        const inst = instruments[key];
+        if (!chart || !inst || String(inst.token) !== tokenStr) return;
+        const last = chart.getLastCandle();
+        if (!last) return;
+        const close = Number(Number(ltp).toFixed(2));
+        const bt = Math.floor(Date.now() / 1000 / secondsFor(intervals[key])) * secondsFor(intervals[key]);
+        if (bt < last.time) return; // stale tick from an already-closed bucket
+        if (bt === last.time) {
+          chart.updateCandle({ ...last, high: Math.max(last.high, close), low: Math.min(last.low, close), close });
+        } else {
+          chart.updateCandle({ time: bt, open: close, high: close, low: close, close });
+        }
+      });
+    });
+    return off;
+  }, [live, panelKeys, instruments, intervals]);
 
   useEffect(() => {
     const close = (event) => { if (event.key === 'Escape') { setMenu(null); setProperties(null); setFlyout(null); setChainPanel(null); } };
@@ -491,77 +699,85 @@ export default function TVOverlayPage() {
     sessionStorage.setItem(`fd-seed-${root.chartKey}`, '1');
   };
 
-  const seedAll = (attempt = 0) => {
+  const probeStats = () => {
+    const readLayers = (key) => {
+      const layers = {};
+      ['drawings', 'selection', 'handles', 'preview'].forEach((name) => {
+        const c = document.querySelector(`[data-chart-key="${key}"] .fd-overlay-${name}`);
+        const { data } = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+        let n = 0;
+        for (let i = 3; i < data.length; i += 4) if (data[i] > 0) n += 1;
+        layers[name] = n;
+      });
+      return layers;
+    };
+    const stats = {};
+    Object.entries(rootsRef.current).forEach(([key, root]) => {
+      const canvas = document.querySelector(`[data-chart-key="${key}"] .fd-overlay-drawings`);
+      if (!canvas) { stats[key] = 'no-canvas'; return; }
+      try {
+        const first = root.getDrawings()[0];
+        let mapped = null;
+        if (first) {
+          const ts = root.viewport.tvChart.chart.timeScale();
+          const range = ts.getVisibleLogicalRange();
+          const lastC = root.getCandles().at(-1);
+          const lastP = root.viewport.projection.anchorToPixel({ time: lastC?.time, price: lastC?.close });
+          const p = root.viewport.projection.anchorToPixel(first.anchorPoints[0]);
+          mapped = `anchor:${JSON.stringify(p)} nC:${root.getCandles().length} range:${range ? JSON.stringify({ f: Math.round(range.from), t: Math.round(range.to) }) : 'null'} lastP:${JSON.stringify(lastP)}`;
+        }
+        const layers = readLayers(key);
+        const lastRender = root.renderer.debug?.lastRender ? `L:${root.renderer.debug.lastRender.count}/${root.renderer.debug.lastRender.painted} c:${root.renderer.debug.lastRender.firstColor} t:${root.renderer.debug.lastRender.firstType}` : 'L:none';
+        const tp = root.getDrawings()[0] ? root.renderer.testPaint(root.getDrawings()[0]) : -1;
+        const dbg = root.debug ? ` flushes:${root.debug.flushes} paints:${root.debug.paints} raf:${root.debug.rafFired} err:${root.debug.lastError ? String(root.debug.lastError).slice(0, 120) : 'none'}` : '';
+        root.invalidate();
+        setTimeout(() => {
+          const after = readLayers(key);
+          setPainted((prev) => ({ ...(prev || {}), [key]: `draw:${layers.drawings} ${lastRender} testOne:${tp} sel:${layers.selection} hand:${layers.handles} -> afterInvalidate draw:${after.drawings} sel:${after.selection}${dbg} ${mapped}` }));
+        }, 800);
+        stats[key] = `probe ${mapped}`;
+      } catch (error) {
+        stats[key] = `err:${error?.message || error}`;
+      }
+    });
+    setPainted(stats);
+  };
+
+  // Hydrate every visible panel: restore saved drawings (once per mounted
+  // root) BEFORE seeding demo content; seeding stays one-shot per tab session
+  // via the fd-seed flag, which PaneManager's changeLayout clears for panels
+  // that were removed so a re-added slot restores+seeds fresh.
+  const hydrateAll = (attempt = 0) => {
     try {
-      const entries = Object.entries(rootsRef.current);
-      if (!entries.length) return;
       let pending = false;
-      entries.forEach(([key, root]) => {
+      panelKeysRef.current.forEach((key) => {
+        if (handledRoots.current.has(key)) return;
+        const root = rootsRef.current[key];
+        if (!root || !root.getCandles()?.length || !root.getDrawings) { pending = true; return; }
+        // Claim BEFORE touching the root so concurrent hydrate passes (layout
+        // switch + mount) never double-process a panel.
+        handledRoots.current.add(key);
         if (root.getDrawings().length) return;
-        if (!root.getCandles()?.length) { pending = true; return; }
         // Persistence: drawings were saved to localStorage (OverlayRoot saves
         // on every change); restore them before ever seeding demo content.
-        if (!sessionStorage.getItem(`fd-restored-${root.chartKey}`)) {
-          sessionStorage.setItem(`fd-restored-${root.chartKey}`, '1');
+        if (!restoredRoots.current.has(root)) {
           const saved = root.serialization?.load?.() || [];
-          if (saved.length) { saved.forEach((d) => root.getInteraction()?.place(d)); return; }
+          if (saved.length) { restoredRoots.current.add(root); saved.forEach((d) => root.getInteraction()?.place(d)); return; }
         }
         // Demo content is one-shot per tab session: don't re-seed on reload.
         if (sessionStorage.getItem(`fd-seed-${root.chartKey}`)) return;
         seedChart(key, root);
       });
-      if (pending && attempt < 40) { setTimeout(() => seedAll(attempt + 1), 250); return; }
+      if (pending && attempt < 40) { setTimeout(() => hydrateAll(attempt + 1), 250); return; }
       setSeedError(null);
-      setTimeout(() => {
-        const readLayers = (key) => {
-          const layers = {};
-          ['drawings', 'selection', 'handles', 'preview'].forEach((name) => {
-            const c = document.querySelector(`[data-chart-key="${key}"] .fd-overlay-${name}`);
-            const { data } = c.getContext('2d').getImageData(0, 0, c.width, c.height);
-            let n = 0;
-            for (let i = 3; i < data.length; i += 4) if (data[i] > 0) n += 1;
-            layers[name] = n;
-          });
-          return layers;
-        };
-        const stats = {};
-        Object.entries(rootsRef.current).forEach(([key, root]) => {
-          const canvas = document.querySelector(`[data-chart-key="${key}"] .fd-overlay-drawings`);
-          if (!canvas) { stats[key] = 'no-canvas'; return; }
-          try {
-            const first = root.getDrawings()[0];
-            let mapped = null;
-            if (first) {
-              const ts = root.viewport.tvChart.chart.timeScale();
-              const range = ts.getVisibleLogicalRange();
-              const lastC = root.getCandles().at(-1);
-              const lastP = root.viewport.projection.anchorToPixel({ time: lastC?.time, price: lastC?.close });
-              const p = root.viewport.projection.anchorToPixel(first.anchorPoints[0]);
-              mapped = `anchor:${JSON.stringify(p)} nC:${root.getCandles().length} range:${range ? JSON.stringify({ f: Math.round(range.from), t: Math.round(range.to) }) : 'null'} lastP:${JSON.stringify(lastP)}`;
-            }
-            const layers = readLayers(key);
-            const lastRender = root.renderer.debug?.lastRender ? `L:${root.renderer.debug.lastRender.count}/${root.renderer.debug.lastRender.painted} c:${root.renderer.debug.lastRender.firstColor} t:${root.renderer.debug.lastRender.firstType}` : 'L:none';
-            const tp = root.getDrawings()[0] ? root.renderer.testPaint(root.getDrawings()[0]) : -1;
-            const dbg = root.debug ? ` flushes:${root.debug.flushes} paints:${root.debug.paints} raf:${root.debug.rafFired} err:${root.debug.lastError ? String(root.debug.lastError).slice(0, 120) : 'none'}` : '';
-            root.invalidate();
-            setTimeout(() => {
-              const after = readLayers(key);
-              setPainted((prev) => ({ ...(prev || {}), [key]: `draw:${layers.drawings} ${lastRender} testOne:${tp} sel:${layers.selection} hand:${layers.handles} -> afterInvalidate draw:${after.drawings} sel:${after.selection}${dbg} ${mapped}` }));
-            }, 800);
-            stats[key] = `probe ${mapped}`;
-          } catch (error) {
-            stats[key] = `err:${error?.message || error}`;
-          }
-        });
-        setPainted(stats);
-      }, 800);
     } catch (error) {
       setSeedError(String(error?.message || error));
-      console.error('seed failed', error);
+      console.error('hydrate failed', error);
     }
   };
 
-  useEffect(() => { seedAll(); }, []);
+  useEffect(() => { hydrateAll(); }, []);
+  useEffect(() => { const t = setTimeout(() => hydrateAll(), 900); const p = setTimeout(probeStats, 1600); return () => { clearTimeout(t); clearTimeout(p); }; }, [panelKeys]);
 
   const onSelectionBus = (chartKey, root) => {    root.bus.on('selection:changed', (ids) => {
       const rootNow = rootsRef.current[chartKey];
@@ -589,96 +805,254 @@ export default function TVOverlayPage() {
         onSell={() => openOrderPanel(activeKey, 'SELL')}
         setTool={setTool}
       />
-      <LiveQuoteFeed live={live} baselineFor={(key) => chartsRef.current[key]?.getLastCandle?.()?.close ?? null} />
+      <LiveQuoteFeed baselineFor={(key) => chartsRef.current[key]?.getLastCandle?.()?.close ?? null} />
       <AlertNotifications />
-      <header style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 10 }}>
-        <strong style={{ fontSize: 14, color: 'var(--text)', marginRight: 8 }}>Phase 9 — Overlay Engine</strong>
-        <button style={magnet ? toolActive : toolStyle} title="Snap to OHLC" onClick={() => setMagnet((v) => !v)}>magnet {magnet ? 'on' : 'off'}</button>
-        <button style={toolStyle} title="Undo (Ctrl+Z)" onClick={() => rootsRef.current[activeKey]?.undo()}>undo</button>
-        <button style={toolStyle} title="Redo" onClick={() => rootsRef.current[activeKey]?.redo()}>redo</button>
-        <button style={toolStyle} title="Clear all drawings" onClick={() => rootsRef.current[activeKey]?.clearAll()}>clear</button>
-        <button style={toolStyle} title="Seed demo drawings on both charts" onClick={seedAll}>seed</button>
-        <button style={live ? toolActive : toolStyle} onClick={() => setLive((v) => !v)}>live {live ? 'on' : 'off'}</button>
-        <button style={alertsOpen ? toolActive : toolStyle} title="Price / drawing / indicator alerts" onClick={() => setAlertsOpen((v) => !v)}>alerts</button>
-        <button style={objectsOpen ? toolActive : toolStyle} title="Drawing object tree" onClick={() => setObjectsOpen((v) => !v)}>objects</button>
-        <button style={dark ? toolActive : toolStyle} title="Toggle dark / light theme" onClick={() => setDark((v) => !v)}>theme {dark ? 'dark' : 'light'}</button>
+      <header style={{
+        display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
+        height: 44, padding: '0 8px', flexShrink: 0,
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+      }}>
+        {/* Brand + symbol context */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          paddingRight: 12, marginRight: 2, flexShrink: 0,
+          borderRight: '1px solid var(--line2)',
+        }}>
+          <div style={{
+            width: 24, height: 24, borderRadius: 6,
+            background: 'var(--grad)', display: 'grid', placeItems: 'center',
+            fontSize: 10, color: '#fff', fontWeight: 700, letterSpacing: '-0.02em',
+          }}>
+            FD
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+            <b style={{ fontSize: 13, color: 'var(--text)', letterSpacing: '-0.01em' }}>{instruments[activeKey].symbol}</b>
+            <span style={{ fontSize: 10, color: 'var(--muted)' }}>
+              {instruments[activeKey].exchange} · {instruments[activeKey].chartMode === 'strike' ? 'OPTION' : instruments[activeKey].chartMode === 'index' ? 'INDEX' : 'FUTURE'}
+            </span>
+          </div>
+        </div>
+
+        {/* Layout switcher */}
+        <div style={{ display: 'flex', gap: 1, alignItems: 'center', background: 'var(--bg2)', borderRadius: 5, padding: 2, flexShrink: 0 }} title="Chart layout">
+          {[
+            { n: 1, label: '1 chart', Icon: Square },
+            { n: 2, label: '2 charts', Icon: Columns2 },
+            { n: 3, label: '3 charts', Icon: Columns3 },
+            { n: 4, label: '4 charts', Icon: Columns4 },
+          ].map(({ n, label, Icon }) => (
+            <button
+              key={n}
+              title={label}
+              onClick={() => changeLayout(n)}
+              className={layout === n ? 'layout-btn on' : 'layout-btn'}
+            >
+              <Icon size={12} />
+            </button>
+          ))}
+        </div>
+
+        {/* Timeframe — applies to the active panel */}
+        <div style={{ display: 'flex', gap: 1, alignItems: 'center', background: 'var(--bg2)', borderRadius: 5, padding: 2, flexShrink: 0 }} title={`Timeframe — ${instruments[activeKey].symbol}`}>
+          {QUICK_TIMEFRAMES.map((tf) => (
+            <button
+              key={tf.tv}
+              title={tf.label}
+              onClick={() => setIntervals((prev) => ({ ...prev, [activeKey]: tf.relay }))}
+              className={intervals[activeKey] === tf.relay ? 'tf-btn on' : 'tf-btn'}
+            >
+              {tf.label}
+            </button>
+          ))}
+        </div>
+
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-          active: <b style={{ color: 'var(--text)' }}>{instruments[activeKey].symbol}</b>
-          {' · '}objects {counts.a + counts.b} ({counts.a}+{counts.b})
-          {' · '}selected {selectedCount.a + selectedCount.b}
-          {' · '}ESC cancel · SHIFT constrain/multi · ALT duplicate · CTRL no-snap
-          {seedError ? <b style={{ color: '#f23645' }}> seed error: {seedError}</b> : null}
-          {painted ? <span> painted: {Object.entries(painted).map(([k, v]) => `${k}:${v}`).join(' ')}</span> : null}
-        </span>
+
+        {/* Right cluster — trading actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <IndicatorMenu
+            active={indicators[activeKey]}
+            setActive={(next) => setIndicators((prev) => ({ ...prev, [activeKey]: next }))}
+          />
+          <button
+            style={{ ...toolStyle, background: 'var(--blue)', color: '#ffffff', fontWeight: 700, height: 28 }}
+            title={`Option Chain — ${instruments[activeKey].underlying}`}
+            onClick={() => setChainPanel(activeKey)}
+          >
+            Option Chain
+          </button>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              data-compare-btn
+              style={compare[activeKey] ? toolActive : toolStyle}
+              title="Compare with watchlist"
+              onClick={() => setCompareOpen((v) => !v)}
+            >
+              <GitCompare size={12} /> Compare
+            </button>
+            {compareOpen && (
+              <div
+                data-compare-popover
+                style={{
+                  position: 'absolute', top: 32, right: 0, width: 260, zIndex: 300,
+                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)', overflow: 'hidden',
+                  fontFamily: 'Inter, sans-serif',
+                }}
+              >
+                <div style={{ padding: '6px 12px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--muted)' }}>
+                  VS {instruments[activeKey]?.symbol || '—'}
+                  {compare[activeKey] ? ` · comparing ${compare[activeKey]}` : ''}
+                </div>
+                <div style={{ borderBottom: '1px solid var(--border)' }} />
+                {compareItems.length === 0 && (
+                  <div style={{ padding: 12, fontSize: 11, color: 'var(--muted)' }}>Watchlist is empty — add symbols to compare</div>
+                )}
+                {compareItems.slice(0, 12).map((item) => (
+                  <div
+                    key={item.token}
+                    onClick={() => applyCompare(item)}
+                    style={{
+                      width: '100%', padding: '6px 12px', textAlign: 'left', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontSize: 12, color: 'var(--text)', fontVariantNumeric: 'tabular-nums',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg2)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <span style={{ fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.symbol_label}
+                    </span>
+                    <span style={{ color: 'var(--muted)' }}>{item.ltp != null ? Number(item.ltp).toFixed(2) : '—'}</span>
+                    <span style={{
+                      width: 64, textAlign: 'right', fontWeight: 600,
+                      color: item.change == null ? 'var(--muted)' : (item.change >= 0 ? 'var(--green)' : 'var(--red)'),
+                    }}>
+                      {item.change != null ? (item.change >= 0 ? '+' : '') + Number(item.change).toFixed(2) + '%' : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <span style={{ width: 1, height: 20, background: 'var(--line2)', flexShrink: 0, margin: '0 2px' }} />
+
+          {/* Drawing / edit actions */}
+          <button style={magnet ? iconActive : iconBtn} title="Snap to OHLC" onClick={() => setMagnet((v) => !v)}><Magnet size={13} /></button>
+          <button style={iconBtn} title="Undo (Ctrl+Z)" onClick={() => rootsRef.current[activeKey]?.undo()}><Undo2 size={13} /></button>
+          <button style={iconBtn} title="Redo" onClick={() => rootsRef.current[activeKey]?.redo()}><Redo2 size={13} /></button>
+          <button style={iconBtn} title="Clear all drawings" onClick={() => rootsRef.current[activeKey]?.clearAll()}><Trash2 size={13} /></button>
+          <button style={iconBtn} title="Seed demo drawings on all charts" onClick={hydrateAll}><Sprout size={13} /></button>
+
+          <span style={{ width: 1, height: 20, background: 'var(--line2)', flexShrink: 0, margin: '0 2px' }} />
+
+          {/* Session actions */}
+          <button
+            onClick={() => setLive((v) => !v)}
+            title="Live ticks"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, height: 24, padding: '0 8px',
+              borderRadius: 99, border: 'none', cursor: 'pointer',
+              background: live ? 'rgba(34,197,139,.13)' : 'rgba(240,82,95,.13)',
+              color: live ? 'var(--green)' : 'var(--red)',
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+            {live ? 'LIVE' : 'PAUSED'}
+          </button>
+          <button style={alertsOpen ? iconActive : iconBtn} title="Price / drawing / indicator alerts" onClick={() => setAlertsOpen((v) => !v)}><Bell size={13} /></button>
+          <button style={objectsOpen ? iconActive : iconBtn} title="Drawing object tree" onClick={() => setObjectsOpen((v) => !v)}><ListTree size={13} /></button>
+
+          <span style={{ width: 1, height: 20, background: 'var(--line2)', flexShrink: 0, margin: '0 2px' }} />
+
+          {/* Display actions */}
+          <button style={dark ? iconActive : iconBtn} title="Toggle dark / light theme" onClick={() => setDark((v) => !v)}>
+            {dark ? <Moon size={13} /> : <Sun size={13} />}
+          </button>
+          <button
+            style={iconBtn}
+            title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            onClick={() => {
+              if (document.fullscreenElement) { document.exitFullscreen(); } else { document.documentElement.requestFullscreen?.(); }
+            }}
+          >
+            {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        </div>
       </header>
+      <span style={{ fontSize: 10, color: 'var(--dim)', display: 'block', textAlign: 'right', margin: '-4px 2px 8px' }}>
+        ESC cancel · SHIFT constrain/multi · ALT duplicate · CTRL no-snap
+      </span>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <TVLeftToolbar tool={tool} setTool={setTool} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {CHARTS.map((chart) => (
-              <div
-                key={chart.key}
-                data-chart-key={chart.key}
-                style={{ position: 'relative', border: activeKey === chart.key ? '1px solid #22ab94' : '1px solid var(--border)', borderRadius: 8, padding: 6 }}
-                onPointerEnter={() => {
-                  setActiveKey(chart.key);
-                  Object.entries(rootsRef.current).forEach(([key, root]) => root?.setActive(key === chart.key));
+          <div style={{ display: 'grid', gap: 10, height: 'calc(100vh - 130px)', ...LAYOUT_GRID[layout] }}>
+            {panelKeys.map((key) => {
+              const chart = PANEL_DEF[key];
+              return (
+                <div
+                  key={key}
+                  data-chart-key={key}
+                  style={{
+                  position: 'relative',
+                  minHeight: 0, minWidth: 0, overflow: 'hidden',
+                  display: 'flex', flexDirection: 'column',
+                  border: activeKey === key ? '1px solid var(--blue)' : '1px solid var(--border)',
+                  borderRadius: 8, padding: 6,
                 }}
-              >
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                  <b style={{ color: 'var(--text)' }}>{instruments[chart.key].symbol}</b>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span>{counts[chart.key]} objects · {selectedCount[chart.key]} selected</span>
-                    <span style={{ display: 'flex', gap: 3 }}>
-                      {QUICK_TIMEFRAMES.map((tf) => (
-                        <button
-                          key={tf.tv}
-                          title={tf.label}
-                          style={intervals[chart.key] === tf.relay ? toolActive : toolStyle}
-                          onClick={() => setIntervals((prev) => ({ ...prev, [chart.key]: tf.relay }))}
-                        >
-                          {tf.label}
-                        </button>
-                      ))}
-                    </span>
-                    <IndicatorMenu
-                      active={indicators[chart.key]}
-                      setActive={(next) => setIndicators((prev) => ({ ...prev, [chart.key]: next }))}
-                    />
-                    <button title={`Option Chain — ${chart.underlying}`} style={chainPanel === chart.key ? toolActive : toolStyle} onClick={() => setChainPanel(chart.key)}>Option Chain</button>
-                    {instruments[chart.key].chartMode === 'strike' && (
-                      <button title={`Back to ${chart.label} index`} style={toolStyle} onClick={() => switchInstrument(chart.key, indexInstrument(chart))}>Index</button>
-                    )}
-                  </span>
-                </div>
-                <BuySellOverlay
-                  exchange={instruments[chart.key].exchange}
-                  token={instruments[chart.key].token}
-                  symbol={instruments[chart.key].symbol}
-                  underlying={instruments[chart.key].underlying}
-                  kind={instruments[chart.key].chartMode === 'strike' ? 'option' : 'future'}
-                  onOrder={(side) => openOrderPanel(chart.key, side)}
-                />
-                <TVChartContainer
-                  exchange={instruments[chart.key].exchange}
-                  token={instruments[chart.key].token}
-                  symbol={instruments[chart.key].symbol}
-                  interval={intervals[chart.key]}
-                  indicators={indicators[chart.key]}
-                  chartKey={`tv-overlay-${chart.key}`}
-                  overlay={overlayProps(chart)}
-                  onReady={(chartApi, root) => {
-                    chartsRef.current[chart.key] = chartApi;
-                    root?.setCandles(chartApi.getCandles());
-                    onSelectionBus(chart.key, root);
+                  onPointerEnter={() => {
+                    setActiveKey(key);
+                    Object.entries(rootsRef.current).forEach(([k, root]) => root?.setActive(k === key));
                   }}
-                  onError={(error) => console.error(chart.key, error)}
-                  style={{ width: '100%', height: 'calc(100vh - 130px)', minHeight: 380 }}
-                />
-              </div>
-            ))}
+                >
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                    <b style={{ color: 'var(--text)' }}>{instruments[key].symbol}</b>
+                    {compare[key] && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--gold)' }}>vs {compare[key]}</span>
+                        <button title="Remove compare" style={{ ...toolStyle, padding: '0 4px', fontSize: 10 }} onClick={() => clearCompare(key)}>×</button>
+                      </span>
+                    )}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>{counts[key]} objects · {selectedCount[key]} selected</span>
+                      {instruments[key].chartMode === 'strike' && (
+                        <button title={`Back to ${chart.label} index`} style={toolStyle} onClick={() => switchInstrument(key, indexInstrument(chart))}>Index</button>
+                      )}
+                    </span>
+                  </div>
+                  <BuySellOverlay
+                    exchange={instruments[key].exchange}
+                    token={instruments[key].token}
+                    symbol={instruments[key].symbol}
+                    underlying={instruments[key].underlying}
+                    kind={instruments[key].chartMode === 'strike' ? 'option' : 'future'}
+                    onOrder={(side) => openOrderPanel(key, side)}
+                  />
+                  {(positionsSlice || []).filter((p) => String(p.token) === String(instruments[key].token)).map((p) => (
+                    <EntryBar key={p.id} chart={chartsRef.current[key]} position={p} />
+                  ))}
+                  <TVChartContainer
+                    exchange={instruments[key].exchange}
+                    token={instruments[key].token}
+                    symbol={instruments[key].symbol}
+                    interval={intervals[key]}
+                    indicators={indicators[key]}
+                    chartKey={`tv-overlay-${key}`}
+                    overlay={overlayProps(chart)}
+onReady={(chartApi, root) => {
+                      chartsRef.current[key] = chartApi;
+                      root?.setCandles(chartApi.getCandles());
+                      onSelectionBus(key, root);
+                    }}
+                    onError={(error) => console.error(key, error)}
+                    style={{ width: '100%', flex: 1, minHeight: 0 }}
+                  />
+                </div>
+              );
+            })}
           </div>
           <InstrumentCard
             chart={instruments[activeKey]}
@@ -719,9 +1093,11 @@ export default function TVOverlayPage() {
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg2)',
         }}>
-          {[['account', 'Account'], ['positions', 'Positions'], ['book', 'Order Book']].map(([id, label]) => (
-            <button key={id} onClick={() => setDockTab(id)} style={dockTab === id ? toolActive : toolStyle}>{label}</button>
-          ))}
+          <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', borderRadius: 6, padding: 2 }}>
+            {[['account', 'Account'], ['positions', 'Positions'], ['book', 'Order Book'], ['history', 'History']].map(([id, label]) => (
+              <button key={id} onClick={() => setDockTab(id)} className={dockTab === id ? 'tf-btn on' : 'tf-btn'} style={{ height: 24 }}>{label}</button>
+            ))}
+          </div>
           <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>
             Live from TradingStore — place a Buy/Sell on either chart and it appears here instantly.
           </span>
@@ -739,15 +1115,21 @@ export default function TVOverlayPage() {
           )}
           {dockTab === 'book' && (
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', maxHeight: 340 }}>
-              <div style={{ height: 230, flexShrink: 0, borderBottom: '1px solid #e0e3eb' }}>
+              <div style={{ height: 230, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
                 <OrderBook
                   token={instruments[activeKey].token}
                   kind={instruments[activeKey].chartMode === 'strike' ? 'option' : 'future'}
+                  showBidAsk={false}
                 />
               </div>
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                 <OrderManager />
               </div>
+            </div>
+          )}
+          {dockTab === 'history' && (
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <TradeHistory />
             </div>
           )}
         </div>

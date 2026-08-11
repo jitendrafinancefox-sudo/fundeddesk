@@ -2,10 +2,10 @@
 import { themeTokens } from '../engine/ThemeManager';
 
 // Screen-space geometry for the position-tool family. Positions are zone-like
-// drawings: entry/SL/TP are price bands that extend across the full canvas
-// width, so their dirty region always falls back to a full invalidate (the
-// interaction treats them like zones). Pure functions; the renderer and the
-// hit tester both consume positionZones so they always agree on the bands.
+// drawings: entry/SL/TP are price bands that span the anchors' x-extent
+// (bounded between the entry/SL/TP time range). Pure functions; the renderer
+// and the hit tester both consume positionZones so they always agree on the
+// bands.
 
 export const POSITION_TYPES = ['longPosition', 'shortPosition', 'riskReward', 'fixedRisk', 'fixedReward', 'customPosition'];
 export const isPositionType = (drawingType) => POSITION_TYPES.includes(drawingType);
@@ -34,8 +34,8 @@ export function positionZones(drawing, transform) {
   return {
     entry, sl, tp, top, bottom, left, right,
     riskTop, riskBottom, rewardTop, rewardBottom,
-    // Bands extend edge-to-edge (canvas width unknown here — renderer
-    // clamps to ctx.canvas.width, hit test ignores x entirely).
+    // Bands span the anchors' x-extent (left/right above); the renderer and
+    // hit test clamp to those bounds.
     riskRect: { y: riskTop, height: riskBottom - riskTop },
     rewardRect: { y: rewardTop, height: rewardBottom - rewardTop },
     // Body-move centroid: the midpoint between the two outer prices.
