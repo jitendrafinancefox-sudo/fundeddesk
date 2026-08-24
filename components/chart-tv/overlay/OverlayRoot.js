@@ -307,6 +307,10 @@ export function createOverlayRoot({
   resizeCanvases();
   invalidate('full');
 
+  // --- beforeunload: flush pending debounced save on hard navigation/close ---
+  const onBeforeUnload = () => { serialization.flush(drawingsRef.current); };
+  window.addEventListener('beforeunload', onBeforeUnload);
+
   // --- Public API -----------------------------------------------------------
   const root = {
     chartKey,
@@ -343,6 +347,7 @@ export function createOverlayRoot({
       offSelection();
       offMarquee();
       resizeObserver.disconnect();
+      window.removeEventListener('beforeunload', onBeforeUnload);
       events.destroy();
       serialization.flush(drawingsRef.current);
       LAYER_NAMES.forEach((name) => { try { canvases[name].remove(); } catch { /* already gone */ } });

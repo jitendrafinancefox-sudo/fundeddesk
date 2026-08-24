@@ -1003,7 +1003,7 @@ export default function TVOverlayPage() {
                   border: activeKey === key ? '1px solid var(--blue)' : '1px solid var(--border)',
                   borderRadius: 8, padding: 6,
                 }}
-                  onPointerEnter={() => {
+                  onMouseDown={() => {
                     setActiveKey(key);
                     Object.entries(rootsRef.current).forEach(([k, root]) => root?.setActive(k === key));
                   }}
