@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
@@ -8,10 +8,10 @@ import {
   ShieldCheck, LogOut, ChevronDown, Plus, Sparkles, BarChart3,
   Grid3x3, Newspaper, CalendarClock, Users2, LifeBuoy, Ticket, ShieldQuestion,
 } from 'lucide-react';
+import TerminalSelectorModal from '@/components/portal/TerminalSelectorModal';
 
 const MAIN_LINKS = [
   ['/portal', Home, 'Home'],
-  ['/web-terminal', LineChart, 'Web Terminal'],
   ['/portal/accounts', Users, 'Accounts'],
   ['/portal/payouts', Wallet, 'Payouts'],
   ['/portal/leaderboard', Trophy, 'Leaderboard'],
@@ -47,14 +47,24 @@ function NavItem({ href, Icon, label, on, soon }) {
 
 export default function PortalLayout({ children }) {
   const path = usePathname();
+  const router = useRouter();
   const [ready, setReady] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [profile, setProfile] = useState(null);
   const [accCount, setAccCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(path?.startsWith('/portal/analytics'));
+  const [termSelectorOpen, setTermSelectorOpen] = useState(false);
 
   const isTerminal = path === '/portal/terminal';
+
+  function openTerminalSelector() {
+    setTermSelectorOpen(true);
+  }
+
+  function onTerminalSelect(href) {
+    router.push(href);
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -197,6 +207,17 @@ export default function PortalLayout({ children }) {
             {MAIN_LINKS.map(([href, Icon, label]) => (
               <NavItem key={href} href={href} Icon={Icon} label={label} on={path === href} />
             ))}
+            <button onClick={openTerminalSelector} style={{
+              display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '9px 12px', borderRadius: 10,
+              fontSize: 13.5, marginBottom: 2, cursor: 'pointer',
+              color: path === '/portal/terminal' || path === '/tv-chart' ? 'var(--text)' : 'var(--muted)',
+              fontWeight: path === '/portal/terminal' || path === '/tv-chart' ? 600 : 500,
+              background: path === '/portal/terminal' || path === '/tv-chart' ? 'rgba(34,197,139,.15)' : 'transparent',
+              borderLeft: path === '/portal/terminal' || path === '/tv-chart' ? '2px solid var(--green)' : '2px solid transparent',
+            }}>
+              <LineChart size={16} strokeWidth={path === '/portal/terminal' || path === '/tv-chart' ? 2.3 : 2} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Web Terminal</span>
+            </button>
 
             <button onClick={() => setAnalyticsOpen((v) => !v)} style={{
               display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '9px 12px', borderRadius: 10,
@@ -236,6 +257,7 @@ export default function PortalLayout({ children }) {
         </aside>
         <div style={{ flex: 1, minWidth: 0, padding: '26px 30px' }}>{children}</div>
       </div>
+      <TerminalSelectorModal open={termSelectorOpen} onClose={() => setTermSelectorOpen(false)} onSelect={onTerminalSelect} />
       <style dangerouslySetInnerHTML={{ __html: `
         @media(max-width:860px){
           .portal{flex-direction:column}
