@@ -23,7 +23,7 @@ export default function TVChartContainer({
   const hostRef = useRef(null);
   const chartRef = useRef(null);
   const overlayRef = useRef(null);
-  const readyRef = useRef(false);
+  const initialLoadRef = useRef(true);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -32,28 +32,13 @@ export default function TVChartContainer({
     const chart = new TVChart(host, { theme, chartKey, onError });
     chartRef.current = chart;
 
-    const current = { exchange, token, symbol, interval };
-    if (current.symbol) {
-      chart
-        .setSymbol(current)
-        .then(() => {
-          if (!readyRef.current) {
-            readyRef.current = true;
-            chart.fitContent();
-          }
-        })
-        .catch((error) => {
-          if (error?.name !== 'AbortError') onError?.(error);
-        });
-    }
-
     let root = null;
     if (overlay) {
       root = createOverlayRoot({
         container: host,
         tvChart: chart,
         chartKey: chartKey || 'tv-default',
-        identity: { symbol: current.symbol || String(current.token || 'unknown'), timeframe: interval },
+        identity: { symbol: symbol || String(token || 'unknown'), timeframe: interval },
         snap: overlay.snap,
         activeRef: overlay.activeRef || null,
         onReady: overlay.onReady,
@@ -72,7 +57,7 @@ export default function TVChartContainer({
       overlayRef.current = null;
       chart.destroy();
       chartRef.current = null;
-      readyRef.current = false;
+      initialLoadRef.current = true;
     };
   }, []);
 
@@ -80,11 +65,16 @@ export default function TVChartContainer({
     const chart = chartRef.current;
     if (!chart || !symbol) return undefined;
     const controller = new AbortController();
+    const isInitial = initialLoadRef.current;
     chart
       .setSymbol({ exchange, token, symbol, interval }, controller.signal)
       .then(() => {
         overlayRef.current?.setCandles(chart.getCandles());
         chart.setIndicators(buildIndicators(chart.getCandles(), indicators));
+        if (isInitial) {
+          initialLoadRef.current = false;
+          chart.fitContent();
+        }
       })
       .catch((error) => {
         if (error?.name !== 'AbortError') onError?.(error);

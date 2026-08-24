@@ -1,4 +1,4 @@
-const DEFAULT_RELAY = process.env.NEXT_PUBLIC_ANGEL_RELAY_URL || 'http://localhost:5001';
+const DEFAULT_RELAY = process.env.NEXT_PUBLIC_RELAY_URL || 'http://localhost:5001';
 
 function json(url, signal) {
   return fetch(url, { signal }).then(async (response) => {
