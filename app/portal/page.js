@@ -2,7 +2,7 @@
 /* Portal Home — account overview dashboard (stats + equity curve) */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { createChart } from 'lightweight-charts';
+import { createChart, AreaSeries } from 'lightweight-charts';
 import { supabase, fmt } from '@/lib/supabaseClient';
 import { PartyPopper, LineChart, ScrollText, Wallet, ArrowRight } from 'lucide-react';
 
@@ -45,7 +45,7 @@ export default function PortalHome() {
       timeScale: { timeVisible: true, borderColor: 'rgba(255,255,255,.1)' },
       rightPriceScale: { borderColor: 'rgba(255,255,255,.1)' },
     });
-    const series = chart.addAreaSeries({
+    const series = chart.addSeries(AreaSeries, {
       lineColor: '#22C58B', topColor: 'rgba(34,197,139,.25)', bottomColor: 'rgba(34,197,139,0)', lineWidth: 2,
     });
     let eq = acc.plans.capital;
