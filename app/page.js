@@ -5,7 +5,11 @@
    + sizes), comparison table, steps, testimonials, CTA band
    ================================================================ */
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
+import { useScrollReveal, useStaggeredReveal } from '@/hooks/useScrollReveal';
+import LiveTicker from '@/components/LiveTicker';
+import HeroSequence from '@/components/HeroSequence';
 
 const SIZES = [
   { cap: '₹2 Lakh',  capN: 200000,  fee2: '₹2,999',  fee1: '₹3,899'  },
@@ -77,14 +81,6 @@ export default function Home() {
     const t = setInterval(() => setAnn((a) => (a + 1) % ANNOUNCE.length), 3500);
     return () => clearInterval(t);
   }, []);
-  useEffect(() => {
-    const io = new IntersectionObserver(
-      (es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }),
-      { threshold: 0.15 }
-    );
-    document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
 
   const s = SIZES[size];
   const fee = step === '2step' ? s.fee2 : s.fee1;
@@ -108,14 +104,10 @@ export default function Home() {
       {/* HERO */}
       <header className="hero" style={{
         position: 'relative', textAlign: 'center', overflow: 'hidden',
-        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '90px 0',
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 0',
       }}>
-        <div style={{ position: 'absolute', inset: '-120px 0 0', background: 'radial-gradient(720px 400px at 50% -8%, rgba(34,197,139,.20), transparent 65%), radial-gradient(520px 300px at 82% 22%, rgba(124,242,156,.08), transparent 60%)', pointerEvents: 'none' }} />
+        <HeroSequence />
         <NeuralSphere scale={1.15} blend="screen" />
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'radial-gradient(120% 85% at 50% 42%, transparent 42%, rgba(6,7,12,.6) 100%)',
-        }} />
         <div className="wrap" style={{ position: 'relative' }}>
           <span className="pill" style={{ color: '#22C58B', background: 'rgba(34,197,139,.1)', borderColor: 'rgba(34,197,139,.3)' }}>
             🇮🇳 Built for Indian traders · Options · Simulated capital
@@ -146,15 +138,15 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="market-band" />
+      <LiveTicker />
 
       {/* CHALLENGE PICKER */}
-      <section id="challenge-picker" style={{ paddingTop: 24, scrollMarginTop: 90 }}>
+      <section id="challenge-picker" style={{ paddingTop: 24, paddingBottom: 32, scrollMarginTop: 90 }}>
         <div className="wrap">
-          <div className="sec-head" data-reveal>
+          <motion.div className="sec-head" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px 0px -10% 0px" }} transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}>
             <h2>Funded Account <span className="grad-text">Challenges</span></h2>
             <p>Pick your path and your size. Same public rules for everyone.</p>
-          </div>
+          </motion.div>
 
           {/* tabs */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -176,7 +168,7 @@ export default function Home() {
           </div>
 
           {/* pricing card */}
-          <div className="card pricecard" data-reveal style={{ maxWidth: 620, margin: '0 auto', padding: 0, overflow: 'hidden', borderColor: 'rgba(34,197,139,.35)', background: 'linear-gradient(180deg,rgba(34,197,139,.06),var(--card))' }}>
+          <div className="card pricecard" style={{ maxWidth: 620, margin: '0 auto', padding: 0, overflow: 'hidden', borderColor: 'rgba(34,197,139,.35)', background: 'linear-gradient(180deg,rgba(34,197,139,.06),var(--card))' }}>
             <div style={{ padding: '24px 28px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
               <div>
                 <div className="muted" style={{ fontSize: 13 }}>{step === '2step' ? '2 Step Evaluation' : '1 Step Evaluation'} · {s.cap} account</div>
@@ -188,38 +180,49 @@ export default function Home() {
             </div>
             <table className="tbl num">
               <tbody>
-                <tr><td style={{ paddingLeft: 28 }}>Profit target {step === '2step' ? '(Phase 1)' : ''}</td>
-                  <td style={{ textAlign: 'right', paddingRight: 28 }}>{t1}% · <span className="muted">{inr(s.capN * t1 / 100)}</span></td></tr>
-                {step === '2step' && (
-                  <tr><td style={{ paddingLeft: 28 }}>Profit target (Phase 2)</td>
-                    <td style={{ textAlign: 'right', paddingRight: 28 }}>5% · <span className="muted">{inr(s.capN * 5 / 100)}</span></td></tr>
-                )}
-                <tr><td style={{ paddingLeft: 28 }}>Maximum loss</td>
-                  <td style={{ textAlign: 'right', paddingRight: 28 }}>10% · <span className="muted">{inr(s.capN * 10 / 100)}</span></td></tr>
-                <tr><td style={{ paddingLeft: 28 }}>Maximum daily loss</td>
-                  <td style={{ textAlign: 'right', paddingRight: 28 }}>5% · <span className="muted">{inr(s.capN * 5 / 100)}</span></td></tr>
-                <tr><td style={{ paddingLeft: 28 }}>Time limit</td>
-                  <td style={{ textAlign: 'right', paddingRight: 28, color: '#22C58B', fontWeight: 700 }}>Unlimited</td></tr>
-                <tr><td style={{ paddingLeft: 28 }}>Reward split</td>
-                  <td style={{ textAlign: 'right', paddingRight: 28, color: '#22C58B', fontWeight: 700 }}>Up to 90%</td></tr>
+                {[
+                  { label: `Profit target ${step === '2step' ? '(Phase 1)' : ''}`, value: `${t1}% · <span class="muted">${inr(s.capN * t1 / 100)}</span>` },
+                  ...(step === '2step' ? [{ label: 'Profit target (Phase 2)', value: `5% · <span class="muted">${inr(s.capN * 5 / 100)}</span>` }] : []),
+                  { label: 'Maximum loss', value: `10% · <span class="muted">${inr(s.capN * 10 / 100)}</span>` },
+                  { label: 'Maximum daily loss', value: `5% · <span class="muted">${inr(s.capN * 5 / 100)}</span>` },
+                  { label: 'Time limit', value: '<span style="color:#22C58B;font-weight:700">Unlimited</span>' },
+                  { label: 'Reward split', value: '<span style="color:#22C58B;font-weight:700">Up to 90%</span>' },
+                ].map((row, i) => (
+                  <motion.tr
+                    key={row.label}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "0px 0px -10% 0px" }}
+                    transition={{ duration: 0.5, delay: 0.15 + i * 0.06, ease: [0.19, 1, 0.22, 1] }}
+                  >
+                    <td style={{ paddingLeft: 28 }}>{row.label}</td>
+                    <td style={{ textAlign: 'right', paddingRight: 28 }} dangerouslySetInnerHTML={{ __html: row.value }} />
+                  </motion.tr>
+                ))}
               </tbody>
             </table>
-            <div style={{ padding: '18px 28px' }}>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "0px 0px -10% 0px" }}
+              transition={{ duration: 0.5, delay: 0.15 + 6 * 0.06, ease: [0.19, 1, 0.22, 1] }}
+              style={{ padding: '18px 28px' }}
+            >
               <Link className="btn" href="/challenges" style={{ width: '100%', background: 'linear-gradient(96deg,#16C784,#0E9F68)', color: '#04150D', fontWeight: 800 }}>
                 Start {s.cap} Challenge →
               </Link>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
 
       {/* COMPARISON TABLE */}
-      <section>
+      <section style={{ paddingTop: 48, paddingBottom: 48 }}>
         <div className="wrap" style={{ maxWidth: 880 }}>
-          <div className="sec-head" data-reveal>
+          <motion.div className="sec-head" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px 0px -10% 0px" }} transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}>
             <h2>Why traders pick <span className="grad-text">FundedDesk</span></h2>
-          </div>
-          <div className="card" data-reveal style={{ padding: 0, overflow: 'hidden' }}>
+          </motion.div>
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <table className="tbl" style={{ fontSize: 14 }}>
               <thead>
                 <tr>
@@ -238,8 +241,14 @@ export default function Home() {
                   ['Hindi + English human support', true, false],
                   ['Hidden consistency rules', false, true],
                   ['Fee hidden in fine print', false, true],
-                ].map(([f, us, them]) => (
-                  <tr key={f}>
+                ].map(([f, us, them], i) => (
+                  <motion.tr
+                    key={f}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "0px 0px -10% 0px" }}
+                    transition={{ duration: 0.5, delay: 0.1 + i * 0.05, ease: [0.19, 1, 0.22, 1] }}
+                  >
                     <td style={{ paddingLeft: 26 }}>{f}</td>
                     <td style={{ textAlign: 'center' }}>
                       <Dot yes={us} />
@@ -247,7 +256,7 @@ export default function Home() {
                     <td style={{ textAlign: 'center' }}>
                       <Dot yes={them} />
                     </td>
-                  </tr>
+                  </motion.tr>
                 ))}
               </tbody>
             </table>
@@ -258,10 +267,10 @@ export default function Home() {
       {/* HOW IT WORKS — pinned scroll story */}
       <section style={{ paddingTop: 0, paddingBottom: 0, overflow: 'visible' }}>
         <div className="wrap">
-          <div className="sec-head" data-reveal>
+          <motion.div className="sec-head" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px 0px -10% 0px" }} transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}>
             <h2>Three steps to funded</h2>
             <p>Scroll to walk through the journey — from first trade to your first payout.</p>
-          </div>
+          </motion.div>
         </div>
         <PinnedSteps steps={[
           ['01', 'Take the Challenge', 'Trade our live-data NIFTY & BANKNIFTY options terminal with simulated capital. Hit the target, respect the loss limits.'],
@@ -271,18 +280,25 @@ export default function Home() {
       </section>
 
       {/* TESTIMONIALS (sample-labeled) */}
-      <section style={{ paddingTop: 0 }}>
+      <section style={{ paddingTop: 32, paddingBottom: 48 }}>
         <div className="wrap">
-          <div className="sec-head" data-reveal>
+          <motion.div className="sec-head" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px 0px -10% 0px" }} transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}>
             <h2>Traders who read the rules first</h2>
-          </div>
+          </motion.div>
           <div className="grid3">
             {[
               ['RS', 'Rohan S. · Jaipur', 'Pehli baar kisi platform ne breach par exact timestamp aur equity snapshot diya — maine khud verify kiya. Yahi transparency chahiye thi.'],
               ['PK', 'Priya K. · Mumbai', 'The live drawdown meter changed how I manage risk. I always know my distance from the limit before I take a trade.'],
               ['AM', 'Arjun M. · Indore', 'Support replied in Hindi at 11pm and fixed my KYC in one go. Reward hit my bank the next morning.'],
-            ].map(([av, who, txt]) => (
-              <div className="card" data-reveal key={av}>
+            ].map(([av, who, txt], i) => (
+              <motion.div
+                key={av}
+                className="card"
+                initial={{ opacity: 0, scale: 0.96, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                viewport={{ once: true, margin: "0px 0px -10% 0px" }}
+                transition={{ duration: 0.6, delay: 0.1 + i * 0.1, ease: [0.19, 1, 0.22, 1] }}
+              >
                 <div style={{ color: '#F5B93E', letterSpacing: 2, marginBottom: 10, fontSize: 14 }}>★★★★★</div>
                 <p style={{ fontSize: 14, color: '#C6CDDD', marginBottom: 16 }}>&ldquo;{txt}&rdquo;</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -292,23 +308,50 @@ export default function Home() {
                     <div className="dim" style={{ fontSize: 11.5 }}>Sample testimonial (prototype)</div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
       {/* CTA BAND */}
-      <section style={{ paddingTop: 0 }}>
+      <section style={{ paddingTop: 32, paddingBottom: 32 }}>
         <div className="wrap">
-          <div className="card ctaband" data-reveal style={{ textAlign: 'center', padding: 54, background: 'linear-gradient(120deg,rgba(34,197,139,.15),rgba(124,242,156,.05))', borderColor: 'rgba(34,197,139,.35)' }}>
-            <h2 style={{ fontSize: 'clamp(24px,3.2vw,36px)', marginBottom: 10 }}>Ready when the rules are this clear?</h2>
-            <p className="muted" style={{ marginBottom: 26 }}>Create your free account, read every rule, then pick your size.</p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <motion.div
+            className="card ctaband"
+            style={{ textAlign: 'center', padding: 54, background: 'linear-gradient(120deg,rgba(34,197,139,.15),rgba(124,242,156,.05))', borderColor: 'rgba(34,197,139,.35)' }}
+            initial={{ opacity: 0, scale: 0.98, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            viewport={{ once: true, margin: "0px 0px -10% 0px" }}
+            transition={{ duration: 0.6, ease: [0.19, 1, 0.22, 1] }}
+          >
+            <motion.h2
+              style={{ fontSize: 'clamp(24px,3.2vw,36px)', marginBottom: 10 }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1, ease: [0.19, 1, 0.22, 1] }}
+            >
+              Ready when the rules are this clear?
+            </motion.h2>
+            <motion.p
+              className="muted"
+              style={{ marginBottom: 26 }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.18, ease: [0.19, 1, 0.22, 1] }}
+            >
+              Create your free account, read every rule, then pick your size.
+            </motion.p>
+            <motion.div
+              style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.26, ease: [0.19, 1, 0.22, 1] }}
+            >
               <Link className="btn" href="/signup" style={{ background: 'linear-gradient(96deg,#16C784,#0E9F68)', color: '#04150D', fontWeight: 800 }}>Get Funded →</Link>
               <Link className="btn btn-line" href="/india">See the Live Terminal</Link>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
     </main>

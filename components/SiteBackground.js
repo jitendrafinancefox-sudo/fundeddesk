@@ -1,14 +1,11 @@
 'use client';
 import { useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 
-/* ================================================================
-   SiteBackground — the landing page's layered background (gradient
-   wash + faint grid + film grain + drifting stars), extracted so
-   every page on the site can share the exact same premium look.
-   Fixed, z-index behind everything, pointer-events:none — purely
-   ambient, doesn't interfere with any page's own content/interaction.
-   ================================================================ */
 export default function SiteBackground() {
+  const pathname = usePathname();
+  if (pathname === '/') return null;
+
   return (
     <>
       <div className="bg-base" />

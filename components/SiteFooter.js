@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 export default function SiteFooter() {
   const pathname = usePathname();
   const inAppRoute = pathname?.startsWith('/portal') || pathname?.startsWith('/admin') || pathname?.startsWith('/india') || pathname?.startsWith('/terminal') || pathname?.startsWith('/web-terminal') || pathname?.startsWith('/tv-chart');
-  if (inAppRoute) return null;
+  if (inAppRoute || pathname === '/') return null;
 
   return (
     <footer className="foot">

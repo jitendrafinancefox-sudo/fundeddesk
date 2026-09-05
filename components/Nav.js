@@ -39,7 +39,7 @@ export default function Nav() {
 
   const inAppRoute = pathname?.startsWith('/portal') || pathname?.startsWith('/admin') || pathname?.startsWith('/india') || pathname?.startsWith('/terminal') || pathname?.startsWith('/web-terminal') || pathname?.startsWith('/tv-chart');
   const publicPageButLoggedIn = user && (pathname === '/rules' || pathname === '/faq' || pathname === '/challenges');
-  if (inAppRoute || publicPageButLoggedIn) return null;
+  if (inAppRoute || publicPageButLoggedIn || pathname === '/') return null;
 
   return (
     <nav className="top">
