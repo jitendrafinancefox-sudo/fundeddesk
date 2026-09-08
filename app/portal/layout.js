@@ -255,7 +255,7 @@ export default function PortalLayout({ children }) {
             }}><LogOut size={16} /> Log out</button>
           </div>
         </aside>
-        <div style={{ flex: 1, minWidth: 0, padding: '26px 30px' }}>{children}</div>
+        <div style={{ flex: 1, minWidth: 0, padding: '20px 24px' }}>{children}</div>
       </div>
       <TerminalSelectorModal open={termSelectorOpen} onClose={() => setTermSelectorOpen(false)} onSelect={onTerminalSelect} />
       <style dangerouslySetInnerHTML={{ __html: `

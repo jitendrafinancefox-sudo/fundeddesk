@@ -1,199 +1,473 @@
 'use client';
-/* Portal Home — account overview dashboard (stats + equity curve) */
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { createChart, AreaSeries } from 'lightweight-charts';
-import { supabase, fmt } from '@/lib/supabaseClient';
-import { PartyPopper, LineChart, ScrollText, Wallet, ArrowRight } from 'lucide-react';
 
-export default function PortalHome() {
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import AccountSelector from '@/components/portal/dashboard/AccountSelector';
+import KPIRow from '@/components/portal/dashboard/KPIRow';
+import MainPerformanceArea from '@/components/portal/dashboard/MainPerformanceArea';
+import OpenPositionsTable from '@/components/portal/dashboard/OpenPositionsTable';
+import RecentTradesTable from '@/components/portal/dashboard/RecentTradesTable';
+import IndianMarketStatus from '@/components/portal/dashboard/IndianMarketStatus';
+import PnLHeatmap from '@/components/portal/dashboard/PnLHeatmap.jsx';
+import PerformanceAnalytics from '@/components/portal/dashboard/PerformanceAnalytics';
+import QuickActions from '@/components/portal/dashboard/QuickActions';
+import DashboardEmptyState from '@/components/portal/dashboard/DashboardEmptyState';
+import AccountContext from '@/components/portal/dashboard/AccountContext';
+import MarketSession from '@/components/portal/dashboard/MarketSession';
+
+export default function PortalPage() {
   const [accounts, setAccounts] = useState([]);
-  const [acc, setAcc] = useState(null);
+  const [selectedAccountId, setSelectedAccountId] = useState(null);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const [trades, setTrades] = useState([]);
+  const [positions, setPositions] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const chartBox = useRef(null);
+  const [marketData, setMarketData] = useState({
+    nifty: null,
+    bankNifty: null,
+    finNifty: null,
+    vix: null,
+    status: 'CLOSED',
+  });
+  const [monthlyReturns, setMonthlyReturns] = useState([]);
+  const [error, setError] = useState(null);
+  const [softBreaches, setSoftBreaches] = useState({});
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const [{ data: prof }, { data: accs }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', session.user.id).single(),
-        supabase.from('accounts').select('*, plans(*)').eq('user_id', session.user.id).order('created_at', { ascending: false }),
-      ]);
-      setProfile(prof);
-      setAccounts(accs || []);
-      if (accs?.length) setAcc(accs[0]);
-      setLoading(false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        
+        const [{ data: prof }, { data: accs }] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', session.user.id).single(),
+          supabase.from('accounts').select('*, plans(*)').eq('user_id', session.user.id).order('created_at', { ascending: false }),
+        ]);
+        
+        if (!mounted) return;
+        setProfile(prof);
+        setAccounts(accs || []);
+        if (accs?.length) {
+          const firstAcc = accs[0];
+          setSelectedAccountId(firstAcc.id);
+          setSelectedAccount(firstAcc);
+        }
+        setError(null);
+      } catch (err) {
+        if (mounted) setError(err.message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     })();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
-    if (!acc) { setTrades([]); return; }
-    supabase.from('trades').select('*').eq('account_id', acc.id).order('traded_at', { ascending: true })
-      .then(({ data }) => setTrades(data || []));
-  }, [acc]);
+    // Clear the previous account's per-account data before (re)fetching so the
+    // dashboard never shows one account's trades/positions/metrics under another
+    // account's header during the fetch.
+    setTrades([]);
+    setPositions([]);
+    setMonthlyReturns([]);
+    setSoftBreaches({});
 
-  // equity curve
-  useEffect(() => {
-    if (!chartBox.current || !acc) return;
-    const chart = createChart(chartBox.current, {
-      height: 250, autoSize: true,
-      layout: { background: { color: 'transparent' }, textColor: '#98A2B8' },
-      grid: { vertLines: { color: 'rgba(255,255,255,.04)' }, horzLines: { color: 'rgba(255,255,255,.04)' } },
-      timeScale: { timeVisible: true, borderColor: 'rgba(255,255,255,.1)' },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,.1)' },
-    });
-    const series = chart.addSeries(AreaSeries, {
-      lineColor: '#22C58B', topColor: 'rgba(34,197,139,.25)', bottomColor: 'rgba(34,197,139,0)', lineWidth: 2,
-    });
-    let eq = acc.plans.capital;
-    const pts = [{ time: Math.floor(new Date(acc.created_at).getTime() / 1000), value: eq }];
-    trades.forEach((t) => {
-      eq += t.pnl;
-      pts.push({ time: Math.floor(new Date(t.traded_at).getTime() / 1000), value: eq });
-    });
-    // dedupe same-second times
-    const seen = new Set(); const clean = [];
-    pts.forEach((p) => { let t = p.time; while (seen.has(t)) t += 1; seen.add(t); clean.push({ time: t, value: p.value }); });
-    series.setData(clean);
-    chart.timeScale().fitContent();
-    return () => chart.remove();
-  }, [acc, trades]);
+    if (!selectedAccount) return;
 
-  if (loading) return <p className="muted">Loading…</p>;
+    let mounted = true;
+    (async () => {
+      try {
+        // Fetch trades
+        const { data: tradesData } = await supabase
+          .from('trades')
+          .select('*')
+          .eq('account_id', selectedAccount.id)
+          .order('traded_at', { ascending: true });
+        
+        if (!mounted) return;
+        setTrades(tradesData || []);
+        
+        // Generate monthly returns from trades — only when a real capital base
+        // exists (a % return needs a real denominator, not a placeholder).
+        const mCapRaw = Number(selectedAccount.plans?.capital);
+        const mCap = Number.isFinite(mCapRaw) && mCapRaw > 0 ? mCapRaw : null;
+        if (tradesData?.length && mCap != null) {
+          const monthly = {};
+          tradesData.forEach(t => {
+            const month = new Date(t.traded_at).toLocaleString('default', { month: 'short' });
+            const year = new Date(t.traded_at).getFullYear();
+            const key = `${month} ${year}`;
+            if (!monthly[key]) monthly[key] = { return: 0, trades: 0 };
+            monthly[key].return += (t.pnl / mCap) * 100;
+            monthly[key].trades += 1;
+          });
+          setMonthlyReturns(Object.entries(monthly).map(([month, data]) => ({ month, ...data })));
+        } else {
+          setMonthlyReturns([]);
+        }
 
-  if (!accounts.length) return (
-    <div>
-      <div className="card" style={{
-        textAlign: 'center', padding: '52px 30px', marginBottom: 20,
-        background: 'linear-gradient(160deg,rgba(77,124,254,.10),var(--card))', borderColor: 'rgba(77,124,254,.3)',
-      }}>
-        <div style={{
-          width: 60, height: 60, borderRadius: 16, background: 'var(--grad)', margin: '0 auto 18px',
-          display: 'grid', placeItems: 'center', boxShadow: '0 10px 30px rgba(77,124,254,.35)',
-        }}><PartyPopper size={26} color="#fff" /></div>
-        <h2 style={{ fontSize: 22, marginBottom: 8 }}>Welcome{profile?.full_name ? ', ' + profile.full_name.split(' ')[0] : ''}!</h2>
-        <p className="muted" style={{ maxWidth: 420, margin: '0 auto 24px', fontSize: 14.5 }}>
-          You don&apos;t have a challenge account yet. Buy a challenge, get verified, and your live dashboard —
-          equity curve, win ratio, risk meter — comes alive right here.
-        </p>
-        <Link className="btn btn-grad" href="/challenges">Browse Challenges →</Link>
+        // Fetch open positions
+        const { data: positionsData } = await supabase
+          .from('positions')
+          .select('*')
+          .eq('account_id', selectedAccount.id)
+          .eq('status', 'OPEN');
+        
+        if (!mounted) return;
+        setPositions(positionsData || []);
+
+        // Fetch soft breaches
+        const { data: breachesData } = await supabase
+          .from('soft_breaches')
+          .select('rule_type, breach_count, last_breach_at')
+          .eq('account_id', selectedAccount.id);
+        
+        if (!mounted) return;
+        const breaches = {};
+        if (breachesData) {
+          breachesData.forEach(row => {
+            breaches[row.rule_type] = {
+              count: row.breach_count,
+              lastBreachAt: row.last_breach_at,
+            };
+          });
+        }
+        setSoftBreaches(breaches);
+      } catch (err) {
+        console.error('Failed to fetch trades/positions/breaches:', err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [selectedAccount]);
+
+  // Compute account metrics
+  function computeMetrics() {
+    if (!selectedAccount || !trades.length) return null;
+
+    // Real DB fields only — cap is null when the plan row has no capital.
+    const capRaw = Number(selectedAccount.plans?.capital);
+    const cap = Number.isFinite(capRaw) && capRaw > 0 ? capRaw : null;
+    const equityRaw = Number(selectedAccount.equity);
+    const equity = Number.isFinite(equityRaw) ? equityRaw : (cap ?? null);
+
+    const wins = trades.filter(t => t.pnl > 0);
+    const losses = trades.filter(t => t.pnl < 0);
+    const hasLosses = losses.length > 0;
+    const grossW = wins.reduce((s, t) => s + t.pnl, 0);
+    const grossL = Math.abs(losses.reduce((s, t) => s + t.pnl, 0));
+    const winRatio = trades.length ? (wins.length / trades.length) * 100 : 0;
+    const avgWin = wins.length ? grossW / wins.length : 0;
+    const avgLoss = hasLosses ? grossL / losses.length : 0;
+    // Profit factor is undefined (no denominator) when there are no losing trades.
+    const pf = grossL > 0 ? grossW / grossL : null;
+    const totalTrades = trades.length;
+    const tradingDays = new Set(trades.map(t => new Date(t.traded_at).toDateString())).size;
+    const bestTrade = wins.length ? Math.max(...wins.map(t => t.pnl)) : null;
+    const worstTrade = hasLosses ? Math.min(...losses.map(t => t.pnl)) : null;
+
+    // Per-trade returns as % of capital. Requires a real capital base.
+    const returns = cap != null ? trades.map(t => (t.pnl / cap) * 100) : [];
+    const avgReturn = returns.length ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+    const rawStdDev = returns.length > 1
+      ? Math.sqrt(returns.reduce((a, b) => a + Math.pow(b - avgReturn, 2), 0) / returns.length)
+      : 0;
+    const enoughForRatios = returns.length > 1 && rawStdDev > 1e-9;
+
+    // PER-TRADE risk-adjusted return (mean / std of per-trade returns). NOT
+    // annualised: per-trade observations are not daily returns, so a sqrt(252)
+    // factor would be mathematically dishonest. N/A until there is real dispersion.
+    const sharpeRatio = enoughForRatios ? avgReturn / rawStdDev : null;
+
+    const negativeReturns = returns.filter(r => r < 0);
+    const downsideDev = negativeReturns.length
+      ? Math.sqrt(negativeReturns.reduce((a, b) => a + Math.pow(b, 2), 0) / negativeReturns.length)
+      : rawStdDev;
+    const sortinoRatio = (enoughForRatios && downsideDev > 1e-9)
+      ? avgReturn / downsideDev
+      : null;
+
+    // Calmar (total return % / max drawdown %) — needs a real capital base.
+    let maxDD = null;
+    let calmarRatio = null;
+    if (cap != null) {
+      let peak = cap;
+      let runningEquity = cap;
+      let dd = 0;
+      trades.forEach(t => {
+        runningEquity += t.pnl;
+        if (runningEquity > peak) peak = runningEquity;
+        const x = (peak - runningEquity) / peak * 100;
+        if (x > dd) dd = x;
+      });
+      maxDD = dd;
+      calmarRatio = dd > 1e-9 ? ((runningEquity - cap) / cap * 100) / dd : null;
+    }
+
+    // Expectancy
+    const expectancy = totalTrades > 0 ? (winRatio/100 * avgWin) - ((100-winRatio)/100 * avgLoss) : 0;
+
+    // Kelly Criterion — needs a real win/loss payoff ratio. If there are no
+    // losing trades the payoff ratio is unknown → Kelly is N/A (no fallback).
+    const kellyCriterion = avgLoss > 0
+      ? (() => { const winProb = winRatio / 100; return (winProb - (1 - winProb) / (avgWin / avgLoss)) * 100; })()
+      : null;
+
+    return {
+      equity: equity,
+      todayPnl: trades.filter(t => new Date(t.traded_at).toDateString() === new Date().toDateString()).reduce((s, t) => s + t.pnl, 0),
+      avgWin: wins.length ? avgWin : null,
+      avgLoss: hasLosses ? avgLoss : null,
+      winRatio,
+      profitFactor: pf,
+      totalTrades,
+      winningTrades: wins.length,
+      losingTrades: losses.length,
+      bestTrade,
+      worstTrade,
+      tradingDays,
+      sharpeRatio,
+      sortinoRatio,
+      calmarRatio,
+      maxDrawdown: maxDD == null ? null : (maxDD > 0 ? -maxDD : 0),
+      expectancy,
+      kellyCriterion,
+    };
+  }
+
+  const metrics = computeMetrics();
+
+  function handleAccountChange(accountId) {
+    const account = accounts.find(a => a.id === accountId);
+    setSelectedAccountId(accountId);
+    setSelectedAccount(account);
+  }
+
+  function handleNewChallenge() {
+    window.location.href = '/challenges';
+  }
+
+  if (loading) {
+    return <DashboardEmptyState type="loading" />;
+  }
+
+  if (error) {
+    return <DashboardEmptyState type="error" />;
+  }
+
+  if (!accounts.length) {
+    return (
+      <DashboardEmptyState 
+        type="no-account" 
+        onCreateAccount={handleNewChallenge}
+        profile={profile}
+      />
+    );
+  }
+
+  if (!selectedAccount) {
+    return (
+      <DashboardEmptyState 
+        type="no-account" 
+        onCreateAccount={handleNewChallenge}
+        profile={profile}
+        accounts={accounts}
+        onSelectAccount={() => setSelectedAccountId(accounts[0].id)}
+      />
+    );
+  }
+
+  if (!trades.length && !positions.length) {
+    return (
+      <div className="portal-dashboard">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <AccountSelector
+            accounts={accounts}
+            selectedAccountId={selectedAccountId}
+            onAccountChange={handleAccountChange}
+            onNewChallenge={handleNewChallenge}
+            loading={loading}
+          />
+        </div>
+        <DashboardEmptyState
+          type="no-data"
+          onSelectAccount={() => {}}
+          profile={profile}
+        />
       </div>
+    );
+  }
 
-      <div className="grid3">
-        {[
-          [LineChart, 'Live Terminal', 'Trade real NIFTY & BANKNIFTY option chains the moment your account is approved.'],
-          [ScrollText, 'Transparent Rules', 'Every breach condition public — see exactly what keeps your account safe.'],
-          [Wallet, '24h Payouts', 'Once funded, request your reward split any time — processed within a day.'],
-        ].map(([Icon, t, d]) => (
-          <div className="card" key={t} style={{ padding: 22, transition: 'transform .2s,border-color .2s' }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 11, background: 'rgba(77,124,254,.13)',
-              display: 'grid', placeItems: 'center', marginBottom: 14,
-            }}><Icon size={19} color="var(--blue)" /></div>
-            <h3 style={{ fontSize: 15.5, marginBottom: 6 }}>{t}</h3>
-            <p className="muted" style={{ fontSize: 13 }}>{d}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  // Transform positions for OpenPositionsTable component
+  const transformedPositions = positions.map(p => ({
+    id: p.id,
+    symbol: p.symbol,
+    kind: p.kind || null,
+    side: p.side,
+    qty: p.qty,
+    avgPrice: p.avg_price || p.entry_price,
+    currentPrice: p.current_price || p.avg_price || p.entry_price,
+    pnl: p.pnl || 0,
+    pnlPct: p.pnl_pct || 0,
+    sl: p.stop_loss,
+    tp: p.take_profit,
+    margin: p.margin || 0,
+    strike: p.strike,
+    expiry: p.expiry,
+    option_type: p.option_type,
+    underlying: p.underlying,
+  }));
 
-  const cap = acc.plans.capital;
-  const profit = acc.equity - cap;
-  const wins = trades.filter((t) => t.pnl > 0);
-  const losses = trades.filter((t) => t.pnl < 0);
-  const grossW = wins.reduce((s, t) => s + t.pnl, 0);
-  const grossL = Math.abs(losses.reduce((s, t) => s + t.pnl, 0));
-  const winRatio = trades.length ? (wins.length / trades.length) * 100 : 0;
-  const avgWin = wins.length ? grossW / wins.length : 0;
-  const avgLoss = losses.length ? grossL / losses.length : 0;
-  const pf = grossL > 0 ? grossW / grossL : grossW > 0 ? 99 : 0;
-  const days = new Set(trades.map((t) => new Date(t.traded_at).toDateString())).size;
-  const phaseTag = { phase1: 'PHASE 1', phase2: 'PHASE 2', funded: 'FUNDED' }[acc.phase] || acc.phase;
+  // Transform trades for RecentTradesTable component
+  const transformedTrades = trades
+    .filter(t => t.exit_price || t.pnl !== 0) // Closed trades
+    .slice(-20)
+    .reverse()
+    .map(t => ({
+      id: t.id,
+      symbol: t.symbol,
+      type: t.type || null,
+      side: t.side,
+      entryPrice: t.entry_price,
+      exitPrice: t.exit_price,
+      pnl: t.pnl,
+      pnlPct: t.pnl_pct || (t.entry_price ? (t.pnl / Math.abs(t.entry_price * t.qty)) * 100 : 0),
+      tradedAt: t.traded_at,
+      strike: t.strike,
+      expiry: t.expiry,
+      option_type: t.option_type,
+    }));
 
-  const stat = (k, v, color) => (
-    <div className="card" style={{ padding: '16px 18px', flex: 1, minWidth: 150 }}>
-      <div className="dim" style={{ fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase' }}>{k}</div>
-      <div className="num" style={{ fontFamily: 'Manrope', fontWeight: 800, fontSize: 21, color, marginTop: 4 }}>{v}</div>
-    </div>
-  );
+  // Today's P&L for KPI
+  const todayPnl = trades
+    .filter(t => new Date(t.traded_at).toDateString() === new Date().toDateString())
+    .reduce((s, t) => s + t.pnl, 0);
+
+  // Drawdown for KPI — a % drawdown needs a real capital base. null → "—".
+  const kpiCapRaw = Number(selectedAccount.plans?.capital);
+  const kpiCap = Number.isFinite(kpiCapRaw) && kpiCapRaw > 0 ? kpiCapRaw : null;
+  let maxDD = null;
+  if (kpiCap != null) {
+    let peak = kpiCap;
+    let runningEquity = kpiCap;
+    let dd = 0;
+    trades.forEach(t => {
+      runningEquity += t.pnl;
+      if (runningEquity > peak) peak = runningEquity;
+      const x = (peak - runningEquity) / peak * 100;
+      if (x > dd) dd = x;
+    });
+    maxDD = dd;
+  }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
-        <h2 style={{ fontSize: 22 }}>Account Overview</h2>
-        <select value={acc.id} onChange={(e) => setAcc(accounts.find((a) => a.id === e.target.value))} style={{ width: 'auto' }}>
-          {accounts.map((a) => <option key={a.id} value={a.id}>{a.login_id} · {a.plans.name} · {a.status}</option>)}
-        </select>
+    <div className="portal-dashboard">
+      {/* Account selector — single account-context control */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <AccountSelector
+          accounts={accounts}
+          selectedAccountId={selectedAccountId}
+          onAccountChange={handleAccountChange}
+          onNewChallenge={handleNewChallenge}
+          loading={loading}
+        />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, alignItems: 'start' }} className="dash-grid">
-        <div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-            {stat('Account Balance', fmt(acc.equity))}
-            {stat('Equity', fmt(acc.equity))}
-            {stat('Profit', (profit >= 0 ? '+' : '−') + fmt(Math.abs(profit)), profit >= 0 ? 'var(--green)' : 'var(--red)')}
-          </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-            {stat('Average Win', fmt(Math.round(avgWin)), 'var(--green)')}
-            {stat('Average Loss', fmt(Math.round(avgLoss)), 'var(--red)')}
-            {stat('Win Ratio', winRatio.toFixed(1) + '%')}
-            {stat('Profit Factor', pf ? pf.toFixed(2) : '0')}
-          </div>
-          <div className="card" style={{ padding: 16 }}>
-            <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>EQUITY CURVE</div>
-            <div ref={chartBox} style={{ width: '100%' }} />
-          </div>
-        </div>
+      {/* Main Dashboard Content */}
+      <div className="dashboard-sections">
+        {/* Section 1: Account Context / Challenge Progress */}
+        <section style={{ marginBottom: '20px' }}>
+          <AccountContext
+            account={selectedAccount}
+            plan={selectedAccount.plans}
+            trades={trades}
+            softBreaches={softBreaches}
+          />
+        </section>
 
-        <div>
-          <div className="card" style={{ marginBottom: 14, textAlign: 'center' }}>
-            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--grad)', display: 'grid', placeItems: 'center', margin: '0 auto 10px', fontSize: 22 }}>◆</div>
-            <div style={{ fontFamily: 'Manrope', fontWeight: 800, fontSize: 17 }}>{acc.login_id}</div>
-            <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>{acc.plans.name}</div>
-            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 14 }}>
-              <span className="tag tag-blue">{phaseTag}</span>
-              <span className={'tag ' + (acc.status === 'active' ? 'tag-green' : acc.status === 'breached' ? 'tag-red' : 'tag-gold')}>{acc.status.toUpperCase()}</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-              <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '10px 8px' }}>
-                <div className="num" style={{ fontFamily: 'Manrope', fontWeight: 800 }}>{trades.length}</div>
-                <div className="dim" style={{ fontSize: 10.5 }}>No. of trades</div>
-              </div>
-              <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '10px 8px' }}>
-                <div className="num" style={{ fontFamily: 'Manrope', fontWeight: 800 }}>{days}</div>
-                <div className="dim" style={{ fontSize: 10.5 }}>Days traded</div>
-              </div>
-            </div>
-            <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>Created at</div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 14 }}>{new Date(acc.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
-            <Link className="btn btn-grad btn-sm" style={{ width: '100%' }} href="/portal/terminal">Open Terminal →</Link>
-          </div>
+        {/* Section 2: KPI Row - 4 Compact Premium Cards */}
+        <section style={{ marginBottom: '20px' }}>
+          <KPIRow
+            capital={selectedAccount.plans?.capital ?? null}
+            equity={selectedAccount.equity ?? null}
+            todayPnl={todayPnl}
+            drawdown={maxDD}
+            drawdownLimit={selectedAccount.plans?.max_loss ?? null}
+            isLoading={loading}
+          />
+        </section>
 
-          <div className="card">
-            <div className="dim" style={{ fontSize: 11, marginBottom: 10 }}>RISK METER (loss limit used)</div>
-            {(() => {
-              const used = Math.max(0, ((cap - acc.equity) / cap) * 100);
-              const p = Math.min(100, (used / acc.plans.max_loss) * 100);
-              return (
-                <>
-                  <div className="bar" style={{ height: 10 }}>
-                    <i className={p > 70 ? 'r' : 'g'} style={{ width: p + '%' }} />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginTop: 6 }}>
-                    <span className="muted">{used.toFixed(1)}% used</span>
-                    <span className="dim">limit {acc.plans.max_loss}%</span>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
+        {/* Section 3: Two-rail body. The left rail (chart, positions, trades,
+            analytics) and the right rail (account overview, metrics, details,
+            quick actions) are two independent grid cells in ONE grid row with
+            align-items:start — neither forces the other's height, and nothing
+            full-width sits between them waiting on the taller rail. */}
+        <section style={{ marginBottom: '20px' }}>
+          <MainPerformanceArea
+            account={selectedAccount}
+            plan={selectedAccount.plans}
+            trades={trades}
+            metrics={metrics}
+            isLoading={loading}
+            primaryRailExtra={
+              <>
+                <OpenPositionsTable
+                  positions={transformedPositions}
+                  isLoading={loading}
+                />
+                <RecentTradesTable
+                  trades={transformedTrades}
+                  isLoading={loading}
+                />
+                <PnLHeatmap
+                  data={trades}
+                  period="1M"
+                  isLoading={loading}
+                />
+                <PerformanceAnalytics
+                  monthlyReturns={monthlyReturns}
+                  sharpeRatio={metrics?.sharpeRatio}
+                  sortinoRatio={metrics?.sortinoRatio}
+                  calmarRatio={metrics?.calmarRatio}
+                  maxDrawdown={metrics?.maxDrawdown}
+                  avgWin={metrics?.avgWin}
+                  avgLoss={metrics?.avgLoss}
+                  winRate={metrics?.winRatio}
+                  profitFactor={metrics?.profitFactor}
+                  expectancy={metrics?.expectancy}
+                  kellyCriterion={metrics?.kellyCriterion}
+                  isLoading={loading}
+                />
+              </>
+            }
+            secondaryRailExtra={
+              <QuickActions
+                disabledActions={!selectedAccount ? ['terminal', 'payout'] : []}
+                isLoading={loading}
+              />
+            }
+          />
+        </section>
+
+        {/* Section 4: Indian Market Status — full width */}
+        <section style={{ marginBottom: '20px' }}>
+          <IndianMarketStatus
+            niftyData={marketData.nifty}
+            bankNiftyData={marketData.bankNifty}
+            finNiftyData={marketData.finNifty}
+            marketStatus={marketData.status}
+            vix={marketData.vix}
+            isLoading={loading}
+          />
+        </section>
+
+        {/* Section 5: Market Session */}
+        <section>
+          <MarketSession
+            isLoading={loading}
+          />
+        </section>
       </div>
-      <style dangerouslySetInnerHTML={{ __html: `@media(max-width:900px){.dash-grid{grid-template-columns:1fr!important}}` }} />
     </div>
   );
 }
