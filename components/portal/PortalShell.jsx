@@ -22,7 +22,7 @@ import {
   Home, Plus, LineChart, Wallet, Users, Ticket, ScrollText, Trophy,
   Users2, Settings, BarChart3, Lightbulb, LogOut, ChevronDown,
   Grid3x3, Newspaper, CalendarClock, ShieldCheck, ShieldQuestion,
-  Bell, Gift, UserRound, Coins, LifeBuoy, Receipt,
+  Bell, Gift, UserRound, Coins, LifeBuoy, Receipt, Menu, X,
 } from 'lucide-react';
 import { signOutLocal } from '@/lib/auth';
 import { supabase } from '@/lib/supabaseClient';
@@ -80,6 +80,9 @@ export default function PortalShell({ children }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [termOpen, setTermOpen] = useState(false);
   const [marketOpen, setMarketOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerRef = useRef(null);
+  const hamburgerRef = useRef(null);
 
   // Notification panel — list fetched on demand; count comes from context.
   const [notifItems, setNotifItems] = useState([]);
@@ -142,7 +145,7 @@ export default function PortalShell({ children }) {
   }, []);
 
   // Close menus on route change.
-  useEffect(() => { setProfileOpen(false); setNotifOpen(false); }, [path]);
+  useEffect(() => { setProfileOpen(false); setNotifOpen(false); setDrawerOpen(false); }, [path]);
 
   // Close menus on outside click / Escape.
   useEffect(() => {
@@ -150,11 +153,46 @@ export default function PortalShell({ children }) {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false);
       if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
     }
-    function onKey(e) { if (e.key === 'Escape') { setProfileOpen(false); setNotifOpen(false); } }
+    function onKey(e) { if (e.key === 'Escape') { setProfileOpen(false); setNotifOpen(false); setDrawerOpen(false); } }
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, []);
+
+  // Mobile nav drawer: close automatically if the viewport grows past the
+  // breakpoint (e.g. rotating a tablet or resizing a browser window) so it
+  // never gets stranded open over the desktop layout.
+  useEffect(() => {
+    function onResize() { if (window.innerWidth > 900) setDrawerOpen(false); }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // While the drawer is open: trap focus inside it, lock body scroll, and
+  // return focus to the hamburger on close — same pattern as the marketing
+  // site's <Nav> drawer.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const drawer = drawerRef.current;
+    const focusables = drawer ? Array.from(drawer.querySelectorAll('a[href], button:not([disabled])')) : [];
+    focusables[0]?.focus();
+
+    function onKeyDown(e) {
+      if (e.key !== 'Tab' || focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      hamburgerRef.current?.focus();
+    };
+  }, [drawerOpen]);
 
   function logout() {
     signOutLocal('/');
@@ -212,18 +250,47 @@ export default function PortalShell({ children }) {
           neutral surface, not a cinematic wash. That treatment stays on
           the marketing pages (homepage/challenges), not this product UI. */}
 
+      {/* Backdrop — mobile drawer mode only (CSS gates visibility to <900px);
+          click-through to close, sits below the sidebar but above content. */}
+      {drawerOpen && (
+        <div
+          className="portal-drawer-backdrop"
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* ============ SIDEBAR — full height: logo + primary CTA at top,
-          grouped nav in the middle, promo + logout pinned to the bottom. ============ */}
-      <aside className="portal-side" style={{
-        width: 240, flexShrink: 0, borderRight: '1px solid var(--line)',
-        background: 'linear-gradient(180deg,var(--sidebar-bg1, rgba(20,26,43,.55)),var(--sidebar-bg2, rgba(10,12,21,.7)))',
-        backdropFilter: 'blur(10px)', padding: '18px 14px', position: 'sticky', top: 0,
-        alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', zIndex: 1,
-        display: 'flex', flexDirection: 'column',
-      }}>
-        <Link href="/portal" className="logo" style={{ fontSize: 17, flexShrink: 0, marginBottom: 16 }}>
-          <span className="logo-mark" style={{ width: 28, height: 28, fontSize: 13 }}>◆</span>FundedDesk
-        </Link>
+          grouped nav in the middle, promo + logout pinned to the bottom.
+          Desktop: sticky in-flow column. Mobile (<900px): off-canvas drawer
+          driven by `drawerOpen`, toggled from the hamburger in the topbar. ============ */}
+      <aside
+        id="portal-sidebar"
+        ref={drawerRef}
+        className={`portal-side${drawerOpen ? ' portal-side-open' : ''}`}
+        role="dialog"
+        aria-modal={drawerOpen ? 'true' : undefined}
+        aria-label="Portal navigation"
+        style={{
+          width: 240, flexShrink: 0, borderRight: '1px solid var(--line)',
+          background: 'linear-gradient(180deg,var(--sidebar-bg1, rgba(20,26,43,.55)),var(--sidebar-bg2, rgba(10,12,21,.7)))',
+          backdropFilter: 'blur(10px)', padding: '18px 14px', position: 'sticky', top: 0,
+          alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', zIndex: 1,
+          display: 'flex', flexDirection: 'column',
+        }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexShrink: 0 }}>
+          <Link href="/portal" className="logo" style={{ fontSize: 17 }}>
+            <span className="logo-mark" style={{ width: 28, height: 28, fontSize: 13 }}>◆</span>FundedDesk
+          </Link>
+          <button
+            type="button"
+            className="portal-side-close"
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
         <Link href="/challenges" className="btn btn-grad btn-sm" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginBottom: 18,
@@ -314,7 +381,21 @@ export default function PortalShell({ children }) {
         background: 'var(--topbar-bg, rgba(10,12,21,.85))', backdropFilter: 'blur(14px)',
         position: 'sticky', top: 0, zIndex: 60, flexWrap: 'wrap',
       }}>
-        <div style={{ flex: 1, minWidth: 8 }} />
+        <button
+          ref={hamburgerRef}
+          type="button"
+          className="portal-hamburger"
+          onClick={() => setDrawerOpen((v) => !v)}
+          aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={drawerOpen}
+          aria-controls="portal-sidebar"
+        >
+          {drawerOpen ? <X size={19} /> : <Menu size={19} />}
+        </button>
+        <Link href="/portal" className="portal-logo-mobile" aria-label="FundedDesk home">
+          <span className="logo-mark" style={{ width: 26, height: 26, fontSize: 12 }}>◆</span>
+        </Link>
+        <div className="portal-topbar-spacer" style={{ flex: 1, minWidth: 8 }} />
 
         {/* Account selector — the single account-context control for the portal */}
         <AccountSelector
@@ -344,7 +425,7 @@ export default function PortalShell({ children }) {
         </span>
 
         {/* Notifications */}
-        <div ref={notifRef} style={{ position: 'relative' }}>
+        <div ref={notifRef} className="portal-notif-wrap" style={{ position: 'relative' }}>
           <button
             type="button"
             onClick={() => { setNotifOpen((v) => !v); setProfileOpen(false); }}
@@ -455,7 +536,7 @@ export default function PortalShell({ children }) {
         </div>
 
         {/* Profile */}
-        <div ref={profileRef} style={{ position: 'relative', flexShrink: 0 }}>
+        <div ref={profileRef} className="portal-profile-wrap" style={{ position: 'relative', flexShrink: 0 }}>
           <button
             type="button"
             onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}
@@ -494,21 +575,102 @@ export default function PortalShell({ children }) {
         </div>
       </header>
 
-        <main style={{ flex: 1, minWidth: 0, padding: '20px 24px' }}>{children}</main>
+        <main className="portal-main" style={{ flex: 1, minWidth: 0, padding: '20px 24px' }}>{children}</main>
       </div>
 
       <TerminalSelectorModal open={termOpen} onClose={() => setTermOpen(false)} onSelect={(href) => { setTermOpen(false); router.push(href); }} />
 
       <style dangerouslySetInnerHTML={{ __html: `
+        /* Hamburger + compact mobile logo: hidden on desktop, shown <900px */
+        .portal-hamburger{
+          display:none; align-items:center; justify-content:center;
+          width:40px; height:40px; border-radius:10px; flex-shrink:0;
+          border:1px solid var(--border, var(--line2)); background:rgba(255,255,255,0.02);
+          color:var(--text); cursor:pointer;
+        }
+        .portal-hamburger:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+        .portal-logo-mobile{display:none; align-items:center; flex-shrink:0}
+        .portal-side-close{
+          display:none; align-items:center; justify-content:center;
+          width:32px; height:32px; border-radius:8px; flex-shrink:0;
+          border:1px solid var(--border, transparent); background:transparent; color:var(--muted); cursor:pointer;
+        }
+        .portal-drawer-backdrop{
+          display:none;
+          position:fixed; inset:0; z-index:150;
+          background:rgba(2,6,4,0.6);
+          -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
+        }
+
         @media(max-width:1100px){
           .portal-market-pill{display:none}
         }
+
+        /* ---- Mobile shell: sidebar becomes an off-canvas drawer, never a
+           full-width block stacked above the content. ---- */
         @media(max-width:900px){
-          .portal-shell{flex-direction:column}
-          .portal-side{width:100%!important;height:auto!important;position:static!important}
+          .portal-shell{flex-direction:row}
+          .portal-hamburger{display:inline-flex; order:0}
+          .portal-logo-mobile{display:inline-flex; order:1}
+          .acct-selector{order:2; flex:0 1 auto; min-width:0}
+          .portal-topbar-spacer{order:3}
+          .portal-notif-wrap{order:4}
+          .portal-profile-wrap{order:5}
+          .portal-topbar{gap:8px; padding:8px 14px}
+
+          .portal-side-close{display:inline-flex}
+          .portal-drawer-backdrop{display:block}
+          .portal-side{
+            position:fixed !important; top:0 !important; left:0 !important;
+            height:100dvh !important; width:min(300px,86vw) !important;
+            z-index:200 !important; transform:translateX(-100%);
+            transition:transform 0.25s var(--ease-out, ease);
+            padding-top:calc(18px + env(safe-area-inset-top, 0px)) !important;
+            padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+            box-shadow:var(--shadow-lg, 0 16px 48px rgba(0,0,0,.45));
+          }
+          .portal-side-open{transform:translateX(0)}
+
+          /* Touch targets: the desktop sidebar's 9px-padding rows are dense
+             by design for a mouse; on a touch drawer every row needs the
+             ~44px minimum without changing the desktop density. */
+          .portal-side nav a, .portal-side nav button,
+          .portal-side > div:last-child a, .portal-side > div:last-child button{
+            min-height:44px;
+          }
         }
+        @media (prefers-reduced-motion: reduce){
+          .portal-side{transition:none}
+        }
+
         @media(max-width:720px){
           .portal-profile-name{display:none!important}
+        }
+        @media(max-width:900px){
+          .portal-main{padding:16px !important}
+        }
+        @media(max-width:600px){
+          .acct-selector-btn{min-width:0!important; max-width:150px!important; padding:6px 10px 6px 8px!important}
+          .portal-main{padding:12px !important}
+        }
+        @media(max-width:400px){
+          .acct-selector-btn{max-width:120px!important}
+        }
+        /* The account-selector dropdown is position:absolute off a wrapper
+           that (on mobile) sits ~96px from the left edge (hamburger + logo +
+           header padding, all fixed widths). Anchoring it right:0 like on
+           desktop would push most of a 340px panel off-screen to the left,
+           so on mobile it anchors left:0 and its width is capped to the
+           space actually available between that wrapper and the viewport
+           edge, instead of a viewport-relative width that ignores the anchor
+           offset. */
+        @media(max-width:900px){
+          .acct-selector-panel{
+            left:0 !important;
+            right:auto !important;
+            width:min(340px, calc(100vw - 108px)) !important;
+            max-width:none !important;
+          }
         }
       `}} />
     </div>

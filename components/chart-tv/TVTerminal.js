@@ -34,6 +34,7 @@ import { marketData } from '@/services/marketData';
 import { supabase } from '@/lib/supabaseClient';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useAccountRisk } from '@/hooks/useAccountRisk';
+import { useIsMobile } from '@/hooks/useViewport';
 import { usePortalDataOptional } from '@/components/portal/PortalDataProvider';
 import { getPlanTypeLabel, getStatusMeta, getAccountLifecycleState, accountFinancials } from '@/lib/accounts';
 import { getPhaseDisplayLabel, getRulesForAccount } from '@/lib/rules';
@@ -42,7 +43,7 @@ import { PriceBus } from '@/stores/PriceBus';
 import { TradingStore, useTradeState, fmtINR } from '@/stores/TradingStore';
 import { pnlAt, signedINR } from '@/components/chart-tv/levelPnl';
 import { isZoneType, isChannelType, isStrokeType, isPositionType, isTextType } from '@/components/chart/drawing/DrawingDefinitions';
-import { Square, Columns2, Columns3, Columns4, Magnet, Undo2, Redo2, Trash2, Sprout, Bell, ListTree, Moon, Sun, Maximize2, Minimize2, ChevronLeft, ChevronUp, ChevronDown, Info, Zap } from 'lucide-react';
+import { Square, Columns2, Columns3, Columns4, Magnet, Undo2, Redo2, Trash2, Sprout, Bell, ListTree, Moon, Sun, Maximize2, Minimize2, ChevronLeft, ChevronUp, ChevronDown, Info, Zap, Menu, X, List, Pencil, Grid3x3, ListOrdered } from 'lucide-react';
 
 const CHARTS = [
   { key: 'a', label: 'NIFTY', token: '99926000', underlying: 'NIFTY' },
@@ -162,12 +163,107 @@ function SimRiskSection({ rules, capital }) {
   );
 }
 
+// Shared mobile bottom-sheet shell for the terminal's drawer-ified controls
+// (watchlist, drawing tools, and the compact header's overflow menu). Every
+// caller keeps its own state/handlers — this only supplies the backdrop,
+// slide-up panel, close affordance and Escape/backdrop-click dismissal so
+// that behavior is identical across all of them.
+function MobileSheet({ title, onClose, heightVh = 70, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prevOverflow; };
+  }, [onClose]);
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 260, display: 'flex', alignItems: 'flex-end' }}
+      onClick={onClose}
+    >
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(2,6,4,0.6)' }} aria-hidden="true" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'relative', width: '100%', maxHeight: `${heightVh}vh`,
+          background: 'var(--surface)', borderRadius: '14px 14px 0 0',
+          border: '1px solid var(--border)', borderBottom: 'none',
+          boxShadow: '0 -8px 32px rgba(0,0,0,.4)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{title}</span>
+          <button
+            onClick={onClose}
+            title="Close"
+            aria-label={`Close ${title}`}
+            style={{
+              width: 32, height: 32, borderRadius: 8, display: 'grid', placeItems: 'center',
+              background: 'var(--bg2)', border: 'none', color: 'var(--muted)', cursor: 'pointer',
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="terminal-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// One labeled row inside the mobile menu sheet — label left, control right.
+function MobileMenuRow({ label, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+// One button in the mobile bottom action bar — icon + label, equal-width,
+// all comfortably above the 44px touch-target minimum (54px bar height).
+function MobileBarButton({ label, Icon, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      style={{
+        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 3, border: 'none', background: 'transparent', cursor: 'pointer',
+        color: active ? 'var(--brand)' : 'var(--muted)',
+      }}
+    >
+      <Icon size={17} strokeWidth={active ? 2.3 : 1.9} />
+      <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.02em' }}>{label}</span>
+    </button>
+  );
+}
+
 const indexInstrument = (c) => ({ exchange: 'NSE', token: c.token, symbol: c.label, underlying: c.underlying, chartMode: 'index', selection: null });
 
 const TVCHART_STATE_KEY = 'fundeddesk:tvchart:v1';
 const loadTvChartState = () => { try { return JSON.parse(localStorage.getItem(TVCHART_STATE_KEY)) || null; } catch { return null; } };
 
 export default function TVTerminal() {
+  // Mobile terminal mode (spec: chart is the primary workspace, every other
+  // control lives in a drawer/bottom-sheet instead of being squeezed
+  // alongside the chart). Purely a rendering-branch flag — no desktop state,
+  // handler or chart logic below changes shape because of it.
+  const isMobile = useIsMobile(880);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileDrawOpen, setMobileDrawOpen] = useState(false);
   const rootsRef = useRef({});
   const chartsRef = useRef({});
   const handledRoots = useRef(new Set());   // panel keys whose hydrate pass is complete
@@ -273,6 +369,12 @@ export default function TVTerminal() {
   );
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
   const accountPanelRef = useRef(null);
+
+  // The watchlist rail defaults open for the desktop's persistent side
+  // panel; on mobile it's a sheet that should start closed like every other
+  // mobile drawer. Only reacts when the breakpoint is actually crossed, so
+  // it never fights a user who explicitly opened the mobile sheet.
+  useEffect(() => { if (isMobile) setWatchlistOpen(false); }, [isMobile]);
 
   useEffect(() => {
     if (!accountPanelOpen) return undefined;
@@ -1117,11 +1219,81 @@ export default function TVTerminal() {
     });
   };
 
+  // Bottom-dock tab content — shared between the desktop inline dock and the
+  // mobile bottom-sheet version so the six tabs (positions/orders/history/
+  // account/pnl/margin) aren't maintained in two places.
+  const dockContent = (
+    <>
+      {dockTab === 'positions' && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <PositionManager />
+        </div>
+      )}
+      {dockTab === 'orders' && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ height: 90, flexShrink: 0, borderBottom: '1px solid var(--border)', overflow: 'auto' }}>
+            <OrderBook
+              token={instruments[activeKey].token}
+              kind={instruments[activeKey].chartMode === 'strike' ? 'option' : 'future'}
+              showBidAsk={false}
+            />
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <OrderManager />
+          </div>
+        </div>
+      )}
+      {dockTab === 'history' && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <TradeHistory />
+        </div>
+      )}
+      {dockTab === 'account' && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <AccountManager onLogout={() => {}} onOpenSection={() => {}} />
+        </div>
+      )}
+      {dockTab === 'pnl' && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 10, padding: '12px 14px' }}>
+          <DockMetric label="Unrealized P&L" value={fmtINR(accountSlice.unrealized)} accent={accountSlice.unrealized >= 0 ? 'var(--green)' : 'var(--red)'} />
+          <DockMetric label="Realized P&L" value={fmtINR(accountSlice.realized)} accent={accountSlice.realized >= 0 ? 'var(--green)' : 'var(--red)'} />
+          <DockMetric label="Daily P&L" value={fmtINR(accountSlice.dailyPnl)} accent={accountSlice.dailyPnl >= 0 ? 'var(--green)' : 'var(--red)'} />
+          <DockMetric label="Open Positions" value={accountSlice.openPositions ?? '—'} />
+          <DockMetric label="Open Orders" value={accountSlice.openOrders ?? '—'} />
+        </div>
+      )}
+      {dockTab === 'margin' && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 10, padding: '12px 14px' }}>
+          <DockMetric label="Available Margin" value={fmtINR(accountSlice.available)} />
+          <DockMetric label="Used Margin" value={fmtINR(accountSlice.usedMargin)} />
+          <DockMetric label="Free Margin" value={fmtINR(accountSlice.free)} />
+          <DockMetric label="Wallet Balance" value={fmtINR(accountSlice.cash)} />
+          <DockMetric label="Equity" value={fmtINR(accountSlice.equity)} />
+        </div>
+      )}
+    </>
+  );
+
+  const dockTabBar = (
+    <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', borderRadius: 6, padding: 2, flexWrap: 'wrap' }}>
+      {[['positions', 'Positions'], ['orders', 'Orders'], ['history', 'Trade History'], ['account', 'Account'], ['pnl', 'P&L'], ['margin', 'Margin']].map(([id, label]) => (
+        <button
+          key={id}
+          onClick={() => { setDockTab(id); if (!bottomDockOpen) setBottomDockOpen(true); }}
+          style={dockTab === id && bottomDockOpen ? { ...tfBtnActive, height: 26 } : { ...tfBtn, height: 26 }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <main style={{
-      height: '100vh', maxHeight: '100vh', overflow: 'hidden', boxSizing: 'border-box',
+      height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', boxSizing: 'border-box',
       background: 'var(--bg)', fontFamily: 'Inter, sans-serif',
-      padding: 8, display: 'flex', flexDirection: 'column', gap: 8,
+      padding: isMobile ? '6px 6px calc(54px + env(safe-area-inset-bottom, 0px))' : 8,
+      display: 'flex', flexDirection: 'column', gap: isMobile ? 6 : 8,
     }}>
       <TVChartHotkeys
         onBuy={() => openOrderPanel(activeKey, 'BUY')}
@@ -1130,6 +1302,39 @@ export default function TVTerminal() {
       />
       <LiveQuoteFeed baselineFor={(key) => chartsRef.current[key]?.getLastCandle?.()?.close ?? null} />
       <AlertNotifications />
+      {isMobile && (
+        <header style={{
+          display: 'flex', alignItems: 'center', gap: 6, height: 44, padding: '0 6px', flexShrink: 0,
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+        }}>
+          <button
+            style={{ ...iconBtn, width: 30, height: 30 }}
+            title="Menu"
+            aria-label="Open terminal menu"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            <Menu size={16} />
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+            <TVSymbolSearch
+              activeSymbol={instruments[activeKey].symbol}
+              optionChainRows={optionChainRows}
+              onSelect={(item) => {
+                const next = watchItemToInstrument(item);
+                if (next) switchInstrument(activeKey, next);
+              }}
+            />
+          </div>
+          <TVTimeframeDropdown
+            timeframes={QUICK_TIMEFRAMES}
+            active={intervals[activeKey]}
+            onSelect={(relay) => switchTimeframe(activeKey, relay)}
+            label={`Timeframe — ${instruments[activeKey].symbol}`}
+          />
+        </header>
+      )}
+      {!isMobile && (
       <header style={{
         display: 'flex', alignItems: 'center', gap: 6,
         height: 48, padding: '0 8px', flexShrink: 0,
@@ -1350,8 +1555,10 @@ export default function TVTerminal() {
           </button>
         </div>
       </header>
+      )}
 
-      <div style={{ display: 'flex', gap: 8, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', gap: isMobile ? 6 : 8, flex: 1, minHeight: 0 }}>
+        {!isMobile && (
         <div title="ESC cancel · SHIFT constrain/multi · ALT duplicate · CTRL no-snap" style={{ display: 'flex' }}>
           <TVLeftToolbar
             tool={tool}
@@ -1361,6 +1568,7 @@ export default function TVTerminal() {
             onClearAll={() => rootsRef.current[activeKey]?.clearAll()}
           />
         </div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0, minHeight: 0 }}>
           <div style={{ display: 'grid', gap: 8, flex: 1, minHeight: 0, ...LAYOUT_GRID[layout] }}>
             {panelKeys.map((key) => {
@@ -1449,7 +1657,7 @@ onReady={(chartApi, root) => {
             })}
           </div>
         </div>
-        {watchlistOpen ? (
+        {!isMobile && (watchlistOpen ? (
           <div style={{
             width: 300, flexShrink: 0, minHeight: 0,
             border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)',
@@ -1483,8 +1691,49 @@ onReady={(chartApi, root) => {
               <ChevronLeft size={13} />
             </button>
           </div>
-        )}
+        ))}
       </div>
+
+      {/* Mobile: watchlist becomes a slide-up sheet instead of a 300px rail
+          that would eat most of a phone's chart width. Same Watchlist
+          component/props/state as desktop — only the container changes. */}
+      {isMobile && watchlistOpen && (
+        <MobileSheet title="Watchlist" onClose={() => setWatchlistOpen(false)} heightVh={78}>
+          <Watchlist
+            items={displayedItems}
+            prices={prices}
+            stockQuotes={stockQuotes}
+            optionChainRows={optionChainRows}
+            activeToken={instruments[activeKey].token}
+            activeInstrument={instruments[activeKey]}
+            getActiveCandles={() => chartsRef.current[activeKey]?.getCandles?.() || []}
+            onSelect={(item) => { onSelectWatchlistItem(item); setWatchlistOpen(false); }}
+            onAdd={onAddWatchlist}
+            onRemove={onRemoveWatchlist}
+            onClose={() => setWatchlistOpen(false)}
+          />
+        </MobileSheet>
+      )}
+
+      {/* Mobile drawing-tools sheet — same TVLeftToolbar the desktop rail
+          uses, presented as a bottom-sheet tool selector per spec instead of
+          a permanently-docked 40px column. */}
+      {isMobile && mobileDrawOpen && (
+        <MobileSheet title="Drawing tools" onClose={() => setMobileDrawOpen(false)} heightVh={60}>
+          <div style={{ display: 'flex', height: '100%' }}>
+            <TVLeftToolbar
+              tool={tool}
+              setTool={setTool}
+              magnet={magnet}
+              onToggleMagnet={() => setMagnet((v) => !v)}
+              onClearAll={() => rootsRef.current[activeKey]?.clearAll()}
+            />
+            <div style={{ padding: 12, fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+              Pick a tool, then draw directly on the chart. Tap this sheet's backdrop or the close button to get it out of the way — the chosen tool stays active.
+            </div>
+          </div>
+        </MobileSheet>
+      )}
 
       {/* Bottom dock — account / positions / order book from TradingStore
           (same store BuySellOverlay writes to). Mirrors the old terminal's
@@ -1497,7 +1746,13 @@ onReady={(chartApi, root) => {
           this dock gives up, and each chart's own ResizeObserver
           (TVChartResize.js, wired since chart-tv's first version) already
           picks up that new container size and calls chart.resize() on its
-          own. No new resize code, no chart recreation. */}
+          own. No new resize code, no chart recreation.
+
+          Mobile does NOT get this inline strip at all (even collapsed, its
+          34px height is worth reclaiming for the chart on a phone) — the
+          bottom action bar's "Positions" button opens the exact same
+          dockTab/bottomDockOpen state as a full sheet instead (below). */}
+      {!isMobile && (
       <div style={{
         flexShrink: 0,
         height: bottomDockOpen ? 280 : 34,
@@ -1519,17 +1774,7 @@ onReady={(chartApi, root) => {
           background: 'var(--bg2)',
           flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', borderRadius: 6, padding: 2, flexWrap: 'wrap' }}>
-            {[['positions', 'Positions'], ['orders', 'Orders'], ['history', 'Trade History'], ['account', 'Account'], ['pnl', 'P&L'], ['margin', 'Margin']].map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => { setDockTab(id); if (!bottomDockOpen) setBottomDockOpen(true); }}
-                style={dockTab === id && bottomDockOpen ? { ...tfBtnActive, height: 26 } : { ...tfBtn, height: 26 }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {dockTabBar}
           <span style={{ flex: 1 }} />
           <button
             onClick={() => setBottomDockOpen((v) => !v)}
@@ -1542,55 +1787,151 @@ onReady={(chartApi, root) => {
           </button>
         </div>
         <div style={{ display: bottomDockOpen ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {dockTab === 'positions' && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <PositionManager />
-            </div>
-          )}
-          {dockTab === 'orders' && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ height: 90, flexShrink: 0, borderBottom: '1px solid var(--border)', overflow: 'auto' }}>
-                <OrderBook
-                  token={instruments[activeKey].token}
-                  kind={instruments[activeKey].chartMode === 'strike' ? 'option' : 'future'}
-                  showBidAsk={false}
-                />
-              </div>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                <OrderManager />
-              </div>
-            </div>
-          )}
-          {dockTab === 'history' && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <TradeHistory />
-            </div>
-          )}
-          {dockTab === 'account' && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <AccountManager onLogout={() => {}} onOpenSection={() => {}} />
-            </div>
-          )}
-          {dockTab === 'pnl' && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 10, padding: '12px 14px' }}>
-              <DockMetric label="Unrealized P&L" value={fmtINR(accountSlice.unrealized)} accent={accountSlice.unrealized >= 0 ? 'var(--green)' : 'var(--red)'} />
-              <DockMetric label="Realized P&L" value={fmtINR(accountSlice.realized)} accent={accountSlice.realized >= 0 ? 'var(--green)' : 'var(--red)'} />
-              <DockMetric label="Daily P&L" value={fmtINR(accountSlice.dailyPnl)} accent={accountSlice.dailyPnl >= 0 ? 'var(--green)' : 'var(--red)'} />
-              <DockMetric label="Open Positions" value={accountSlice.openPositions ?? '—'} />
-              <DockMetric label="Open Orders" value={accountSlice.openOrders ?? '—'} />
-            </div>
-          )}
-          {dockTab === 'margin' && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 10, padding: '12px 14px' }}>
-              <DockMetric label="Available Margin" value={fmtINR(accountSlice.available)} />
-              <DockMetric label="Used Margin" value={fmtINR(accountSlice.usedMargin)} />
-              <DockMetric label="Free Margin" value={fmtINR(accountSlice.free)} />
-              <DockMetric label="Wallet Balance" value={fmtINR(accountSlice.cash)} />
-              <DockMetric label="Equity" value={fmtINR(accountSlice.equity)} />
-            </div>
-          )}
+          {dockContent}
         </div>
       </div>
+      )}
+
+      {/* Mobile: the account dock (positions/orders/history/account/pnl/
+          margin) becomes a bottom sheet, triggered from the bottom action
+          bar, instead of a strip permanently reserving chart height. */}
+      {isMobile && bottomDockOpen && (
+        <MobileSheet title="Account" onClose={() => setBottomDockOpen(false)} heightVh={72}>
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>{dockTabBar}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>{dockContent}</div>
+        </MobileSheet>
+      )}
+
+      {/* Mobile menu sheet — everything from the desktop header that isn't
+          "essential" (symbol/timeframe stay in the compact top bar above):
+          view/session controls, then account + surveillance utilities. */}
+      {isMobile && mobileMenuOpen && (
+        <MobileSheet title="Terminal menu" onClose={() => setMobileMenuOpen(false)} heightVh={80}>
+          <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <MobileMenuRow label="Live ticks">
+              <button
+                onClick={() => setLive((v) => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px',
+                  borderRadius: 99, border: 'none', cursor: 'pointer',
+                  background: live ? 'rgba(34,197,139,.13)' : 'rgba(240,82,95,.13)',
+                  color: live ? 'var(--green)' : 'var(--red)', fontSize: 12, fontWeight: 700,
+                }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+                {live ? 'LIVE' : 'PAUSED'}
+              </button>
+            </MobileMenuRow>
+
+            <MobileMenuRow label="Theme">
+              <button onClick={() => setDark((v) => !v)} style={{ ...iconBtn, width: 36, height: 36 }}>
+                {dark ? <Moon size={15} /> : <Sun size={15} />}
+              </button>
+            </MobileMenuRow>
+
+            <MobileMenuRow label="Fullscreen">
+              <button
+                style={{ ...iconBtn, width: 36, height: 36 }}
+                onClick={() => { if (document.fullscreenElement) { document.exitFullscreen(); } else { document.documentElement.requestFullscreen?.(); } }}
+              >
+                {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
+            </MobileMenuRow>
+
+            <MobileMenuRow label="Undo / redo">
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button style={{ ...iconBtn, width: 36, height: 36 }} onClick={() => rootsRef.current[activeKey]?.undo()}><Undo2 size={15} /></button>
+                <button style={{ ...iconBtn, width: 36, height: 36 }} onClick={() => rootsRef.current[activeKey]?.redo()}><Redo2 size={15} /></button>
+              </div>
+            </MobileMenuRow>
+
+            <MobileMenuRow label="Alerts">
+              <button style={{ ...iconBtn, width: 36, height: 36 }} onClick={() => { setMobileMenuOpen(false); setAlertsOpen(true); }}><Bell size={15} /></button>
+            </MobileMenuRow>
+
+            <MobileMenuRow label="Drawing objects">
+              <button style={{ ...iconBtn, width: 36, height: 36 }} onClick={() => { setMobileMenuOpen(false); setObjectsOpen(true); }}><ListTree size={15} /></button>
+            </MobileMenuRow>
+
+            <MobileMenuRow label="Seed demo drawings">
+              <button style={{ ...iconBtn, width: 36, height: 36 }} onClick={hydrateAll}><Sprout size={15} /></button>
+            </MobileMenuRow>
+
+            {selectedAccount && (
+              <>
+                <div style={{ height: 1, background: 'var(--line2)' }} />
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                    Account
+                  </div>
+                  <AccountPanelRow label="Account" value={selectedAccount.login_id || '—'} />
+                  <AccountPanelRow label="Program" value={getPlanTypeLabel(selectedPlan?.plan_type)} />
+                  <AccountPanelRow label="Phase" value={getPhaseDisplayLabel(selectedPlan?.plan_type, selectedAccount.phase)} />
+                  <AccountPanelRow label="Status" value={accountLifecycle?.statusLabel || '—'} accent={accountLifecycle?.isTradeable ? 'var(--green)' : 'var(--red)'} />
+                  <AccountPanelRow label="Capital" value={accountFinance?.capital != null ? fmtINR(accountFinance.capital) : '—'} />
+                  <div style={{ height: 1, background: 'var(--line2)', margin: '6px 0' }} />
+                  <AccountPanelRow label="Daily DD limit" value={accountRisk?.drawdown.dailyDrawdownLimitPct != null ? `${accountRisk.drawdown.dailyDrawdownLimitPct}%` : '—'} />
+                  <AccountPanelRow
+                    label="Max DD"
+                    value={accountRisk?.drawdown.maxDrawdownLimitPct != null
+                      ? `${(accountRisk.drawdown.observedMaxDrawdownPct ?? 0).toFixed(1)}% / ${accountRisk.drawdown.maxDrawdownLimitPct}%`
+                      : '—'}
+                    accent={accountRisk?.drawdown.maxDrawdownLimitBreached ? 'var(--red)' : undefined}
+                  />
+                  {tradingBlockedReason && (
+                    <div style={{ marginTop: 8, padding: '6px 8px', borderRadius: 6, background: 'rgba(239,83,80,0.1)', color: 'var(--red)', fontSize: 10, fontWeight: 600 }}>
+                      Trading unavailable — {tradingBlockedReason}
+                    </div>
+                  )}
+                  <SimRiskSection rules={accountRules} capital={accountFinance?.capital} />
+                </div>
+              </>
+            )}
+
+            <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(245,185,62,0.1)', border: '1px solid rgba(245,185,62,0.25)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <Info size={13} color="var(--gold)" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span style={{ fontSize: 10.5, color: 'var(--gold)', lineHeight: 1.5 }}>
+                Practice simulator — orders, fills, positions and P&amp;L are simulated in this browser only. Nothing is sent to a broker or exchange.
+              </span>
+            </div>
+          </div>
+        </MobileSheet>
+      )}
+
+      {/* Mobile bottom action bar — the terminal's persistent trading
+          controls (spec: chart stays primary, everything else opens as a
+          drawer/sheet from here). Fixed to the viewport, not the flex
+          column, so it survives the bottom-dock sheet and chart resize. */}
+      {isMobile && (
+        <div style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 90,
+          display: 'flex', alignItems: 'stretch', height: 54,
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          background: 'var(--surface)', borderTop: '1px solid var(--border)',
+        }}>
+          <MobileBarButton label="Draw" Icon={Pencil} active={mobileDrawOpen} onClick={() => setMobileDrawOpen((v) => !v)} />
+          <MobileBarButton label="Watchlist" Icon={List} active={watchlistOpen} onClick={() => setWatchlistOpen((v) => !v)} />
+          <MobileBarButton
+            label="Chain"
+            Icon={Grid3x3}
+            active={chainPanel != null}
+            onClick={() => setChainPanel((v) => {
+              if (v != null) return null;
+              setScalperPopup(null);
+              const active = instruments[activeKey]?.underlying;
+              setChainUnderlying(active === 'BANKNIFTY' ? 'BANKNIFTY' : 'NIFTY');
+              return activeKey;
+            })}
+          />
+          <MobileBarButton
+            label="Scalper"
+            Icon={Zap}
+            active={scalperEnabled}
+            onClick={() => { setScalperEnabled((v) => !v); setScalperPopup(null); }}
+          />
+          <MobileBarButton label="Positions" Icon={ListOrdered} active={bottomDockOpen} onClick={() => setBottomDockOpen((v) => !v)} />
+        </div>
+      )}
 
       {/* Alerts drawer — same AlertManager the old terminal uses; triggered
           alerts surface through the already-mounted AlertNotifications. */}

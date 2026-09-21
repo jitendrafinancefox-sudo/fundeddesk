@@ -257,7 +257,7 @@ export default function PerformanceAnalytics({
         {/* Metrics grid — compact label + value cells, 3 columns. The
             benchmark comparison collapses to a single colored dot next to
             the label instead of a separate footer row/description line. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+        <div className="perf-metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
           {metrics.map((metric) => {
             const status = getBenchmarkStatus(metric);
             const dotColor = status === 'good' ? 'var(--green)' : status === 'warn' ? 'var(--gold)' : status === 'bad' ? 'var(--red)' : 'var(--dim)';

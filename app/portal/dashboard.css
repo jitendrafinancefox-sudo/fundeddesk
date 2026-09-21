@@ -223,3 +223,32 @@
    here (route-scoped file, loaded only on /portal/*) so they actually run. */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* ============================================================
+   MOBILE AUDIT ADDITIONS (Batch 3 — dashboard widgets + accounts/
+   affiliate/analytics/orders/payouts/settings/support/admin pages).
+   Additive/media-gated only — desktop layout above is untouched.
+   ============================================================ */
+
+/* PerformanceAnalytics metrics grid: 3 → 2 columns on narrow phones so
+   labels/values have room instead of squeezing into ~90px cells. */
+@media(max-width:480px){
+  .portal-dashboard .perf-metrics-grid{ grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+}
+
+/* Suggest a Feature — Full name / Email row: 2 → 1 column on phones.
+   This page renders outside .portal-dashboard, so scope to .portal-shell
+   (present on every /portal/* route via PortalShell.jsx) instead. */
+@media(max-width:480px){
+  .portal-shell .suggest-feature-names{ grid-template-columns:1fr !important; }
+}
+
+/* Orders — same desktop-table / mobile-card swap as Accounts / Payouts /
+   Leaderboard. The table had no mobile fallback before (page-contained
+   horizontal scroll only); this brings it in line with the rest. */
+.portal-dashboard .orders-table-wrap{ overflow-x:auto; }
+.portal-dashboard .orders-cards{ display:none; }
+@media(max-width:900px){
+  .portal-dashboard .orders-table-wrap{ display:none; }
+  .portal-dashboard .orders-cards{ display:block; }
+}

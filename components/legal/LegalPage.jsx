@@ -26,7 +26,7 @@ export default function LegalPage({ slug, title, intro, sections = [] }) {
           {sections.length > 1 && (
             <nav aria-label="Contents" className="card" style={{ padding: '14px 16px', marginBottom: 24 }}>
               <div className="label" style={{ marginBottom: 8 }}>On this page</div>
-              <ol style={{ margin: 0, paddingLeft: 18, columns: sections.length > 6 ? 2 : 1, columnGap: 24 }}>
+              <ol className="legal-toc-list" style={{ margin: 0, paddingLeft: 18, columns: sections.length > 6 ? 2 : 1, columnGap: 24 }}>
                 {sections.map((s, i) => (
                   <li key={s.id} style={{ fontSize: 13, marginBottom: 4, breakInside: 'avoid' }}>
                     <a href={`#${s.id}`} style={{ color: 'var(--blue)' }}>{i + 1}. {s.heading}</a>

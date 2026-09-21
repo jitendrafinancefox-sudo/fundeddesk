@@ -44,6 +44,7 @@ export default function ScalperTicket({ x, y, symbol, price, lotSize, onSubmit, 
       ref={ref}
       role="dialog"
       aria-label="Scalper quick order"
+      className="scalper-ticket"
       style={{
         position: 'fixed', left: pos.left, top: pos.top, zIndex: 250,
         width: 220, background: 'var(--surface)', border: '1px solid var(--border)',
@@ -51,6 +52,22 @@ export default function ScalperTicket({ x, y, symbol, price, lotSize, onSubmit, 
         fontFamily: 'Inter, sans-serif', overflow: 'hidden',
       }}
     >
+      {/* A tooltip-style popup anchored to a finger's tap coordinates is
+          unusable on touch (the finger occludes it, and 220px anchored near
+          a screen edge clips). Below the pointer:coarse breakpoint this
+          becomes a full-width bottom sheet instead — same DOM/state, only
+          position/size are overridden. */}
+      <style>{`
+        @media (pointer: coarse){
+          .scalper-ticket{
+            left:0 !important; right:0 !important; top:auto !important; bottom:0 !important;
+            width:auto !important; border-radius:16px 16px 0 0 !important;
+            padding-bottom:env(safe-area-inset-bottom, 0px);
+            box-shadow:0 -8px 32px rgba(0,0,0,.4) !important;
+          }
+          .scalper-ticket button, .scalper-ticket input{ min-height:40px; }
+        }
+      `}</style>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '7px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)',

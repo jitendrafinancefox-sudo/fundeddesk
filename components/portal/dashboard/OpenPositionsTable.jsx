@@ -82,10 +82,10 @@ export default function OpenPositionsTable({
             <span className="tag tag-blue" style={{ fontSize: 11 }}>LIVE</span>
           </div>
         </div>
-        <div style={{ padding: '20px' }}>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: '140px 70px 80px 100px 100px 100px 100px 110px 90px 80px', 
+        <div style={{ padding: '20px', overflowX: 'auto' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '140px 70px 80px 100px 100px 100px 100px 110px 90px 80px',
             gap: '16px',
             padding: '12px 16px',
             background: 'rgba(255,255,255,0.02)',
@@ -95,6 +95,7 @@ export default function OpenPositionsTable({
             letterSpacing: '.1em',
             textTransform: 'uppercase',
             color: 'var(--muted)',
+            minWidth: '970px',
           }}>
             {['Symbol', 'Type', 'Side', 'Strike', 'Expiry', 'Qty', 'Entry', 'Current', 'P&L', 'P&L %'].map((col) => (
               <div key={col} style={{ fontWeight: 700, fontSize: 10.5, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
@@ -111,6 +112,7 @@ export default function OpenPositionsTable({
                 padding: '12px 16px',
                 borderBottom: i < 4 ? '1px solid var(--border)' : 'none',
                 alignItems: 'center',
+                minWidth: '970px',
               }}>
                 {Array.from({ length: 10 }).map((__, c) => (
                   <div key={c} style={{ height: '12px', width: c === 0 ? '90%' : '65%', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', animation: 'pulse 1.5s ease-in-out infinite' }} />

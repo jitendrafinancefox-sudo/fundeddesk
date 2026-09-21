@@ -103,7 +103,7 @@ export default function TVSymbolSearch({ activeSymbol, optionChainRows, onSelect
     <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0 }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        height: 28, padding: '0 8px', width: 200,
+        height: 28, padding: '0 8px', width: 'min(200px, 60vw)',
         border: '1px solid var(--blue)', borderRadius: 5,
         background: 'var(--bg2)',
       }}>
@@ -133,7 +133,7 @@ export default function TVSymbolSearch({ activeSymbol, optionChainRows, onSelect
           role="listbox"
           style={{
             position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 200,
-            width: 240, maxHeight: 260, overflowY: 'auto',
+            width: 240, maxWidth: 'calc(100vw - 24px)', maxHeight: 260, overflowY: 'auto',
             background: 'var(--surface)', border: '1px solid var(--border)',
             borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.3)',
             fontFamily: 'Inter, sans-serif',

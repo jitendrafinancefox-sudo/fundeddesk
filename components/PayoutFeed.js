@@ -153,31 +153,43 @@ export default function PayoutFeed() {
         </div>
       </div>
 
-      {/* Table Header */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: '1fr 1.2fr 1fr 1fr 1fr', 
-        padding: '12px 24px',
-        background: 'rgba(34,197,139,0.03)',
-        borderBottom: '1px solid var(--border)',
-        fontSize: '11px',
-        fontWeight: 700,
-        letterSpacing: '.1em',
-        textTransform: 'uppercase',
-        color: 'var(--muted)',
-      }}>
-        <div>TRADER</div>
-        <div>ACCOUNT</div>
-        <div>PAYOUT</div>
-        <div>STATUS</div>
-        <div>TIME</div>
-      </div>
+      {/* Table Header + Rows share one horizontal-scroll container: the grid
+          columns below use plain `fr` tracks, which default to a min-width of
+          `auto` (their content's min-content) rather than 0 — on a narrow
+          phone viewport the STATUS pill + ID column content can't shrink
+          enough to fit, so without this the row would silently overflow the
+          card and force the whole page to scroll horizontally. Scoping the
+          scroll (and the `payoutRow` min-width) to this wrapper keeps that
+          overflow contained to the feed itself, matching the same
+          min-width-inside-a-scroll-container pattern already used for wide
+          dashboard tables elsewhere in the app. */}
+      <div className="payout-table-scroll">
+        {/* Table Header */}
+        <div className="payout-row" style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1.2fr 1fr 1fr 1fr',
+          padding: '12px 24px',
+          background: 'rgba(34,197,139,0.03)',
+          borderBottom: '1px solid var(--border)',
+          fontSize: '11px',
+          fontWeight: 700,
+          letterSpacing: '.1em',
+          textTransform: 'uppercase',
+          color: 'var(--muted)',
+        }}>
+          <div>TRADER</div>
+          <div>ACCOUNT</div>
+          <div>PAYOUT</div>
+          <div>STATUS</div>
+          <div>TIME</div>
+        </div>
 
-      {/* Payout Rows */}
-      <div style={{ maxHeight: '480px', overflowY: 'auto' }}>
+        {/* Payout Rows */}
+        <div style={{ maxHeight: '480px', overflowY: 'auto' }}>
         {SAMPLE_PAYOUTS.map((payout, index) => (
           <motion.div
             key={payout.id}
+            className="payout-row"
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1.2fr 1fr 1fr 1fr',
@@ -237,6 +249,7 @@ export default function PayoutFeed() {
             </div>
           </motion.div>
         ))}
+        </div>
       </div>
 
       <style jsx>{`

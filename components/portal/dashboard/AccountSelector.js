@@ -34,9 +34,10 @@ export default function AccountSelector({
   const formatCurrency = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
   return (
-    <div style={{ position: 'relative', zIndex: 50 }}>
+    <div className="acct-selector" style={{ position: 'relative', zIndex: 50, minWidth: 0 }}>
       <button
         ref={dropdownRef}
+        className="acct-selector-btn"
         onClick={() => !loading && setIsOpen(!isOpen)}
         disabled={loading}
         style={{
@@ -55,6 +56,7 @@ export default function AccountSelector({
           transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s',
           minWidth: '220px',
           maxWidth: '320px',
+          width: '100%',
           opacity: loading ? 0.6 : 1,
         }}
         onMouseEnter={(e) => {
@@ -137,6 +139,7 @@ export default function AccountSelector({
               }}
             />
             <motion.div
+              className="acct-selector-panel"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -147,11 +150,14 @@ export default function AccountSelector({
                 right: 0,
                 zIndex: 100,
                 width: '340px',
+                maxWidth: 'calc(100vw - 24px)',
+                maxHeight: 'calc(100vh - 90px)',
+                overflowY: 'auto',
+                overflowX: 'hidden',
                 background: 'var(--card)',
                 border: '1px solid var(--line)',
                 borderRadius: '14px',
                 boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
-                overflow: 'hidden',
                 padding: '8px',
               }}
             >
@@ -193,7 +199,7 @@ export default function AccountSelector({
                         <span style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 500 }}>{account.plans?.name}</span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '44px' }}>
+                    <div className="acct-row-value" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '44px', flexShrink: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 15, fontFamily: 'Manrope, sans-serif', fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>
                         {formatCurrency(account.equity)}
                       </div>

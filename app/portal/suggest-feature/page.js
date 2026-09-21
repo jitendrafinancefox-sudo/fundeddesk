@@ -93,7 +93,7 @@ export default function SuggestFeaturePage() {
         <form onSubmit={submit} style={{ padding: 22 }}>
           {err && <div className="err" style={{ marginBottom: 14, fontSize: 12.5 }}>{err}</div>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 14 }}>
+          <div className="suggest-feature-names" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 14 }}>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Full name</label>
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required />

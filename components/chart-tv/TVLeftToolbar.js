@@ -70,7 +70,15 @@ export default function TVLeftToolbar({ tool, setTool, magnet, onToggleMagnet, o
     if (openGroup === group.id) { closeFlyout(); return; }
     setTool(defaultId);
     const rect = buttonEl.getBoundingClientRect();
-    setFlyoutPos({ left: rect.right + 10, top: rect.top });
+    const FLYOUT_W = 200, FLYOUT_MAX_H = 300, margin = 8;
+    // Prefer opening to the right of the button (vertical rail), but clamp
+    // inside the viewport — on a narrow/mobile screen `rect.right + 10`
+    // alone can push the 200px flyout off the right edge.
+    let left = rect.right + 10;
+    if (left + FLYOUT_W + margin > window.innerWidth) left = Math.max(margin, rect.left - FLYOUT_W - 10);
+    left = Math.min(left, window.innerWidth - FLYOUT_W - margin);
+    const top = Math.min(rect.top, window.innerHeight - FLYOUT_MAX_H - margin);
+    setFlyoutPos({ left, top: Math.max(margin, top) });
     setOpenGroup(group.id);
   };
 

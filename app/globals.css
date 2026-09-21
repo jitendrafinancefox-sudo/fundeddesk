@@ -864,3 +864,39 @@ footer.foot{
   .portal-dashboard div[style*="gridTemplateColumns: '140px"],
   .portal-dashboard div[style*="gridTemplateColumns: '100px"]{ min-width:760px; }
 }
+
+/* ============================================================
+   MARKETING MOBILE FIXES (added by mobile/tablet responsiveness
+   audit — scoped to specific classes only, additive, no existing
+   rule above this block was edited).
+   ============================================================ */
+
+/* components/PayoutFeed.js (rendered on the homepage) — its 5-column
+   grid rows use plain `fr` tracks, which default to a min-width of
+   `auto` (min-content) rather than 0. On a narrow phone the STATUS
+   pill + trader-id column can't shrink enough to fit, so the row was
+   silently overflowing its card and forcing the whole page to scroll
+   horizontally. Scrolling the row itself, at a floor width, keeps the
+   overflow contained to the feed — the same pattern already used for
+   wide portal-dashboard tables above. */
+@media(max-width:640px){
+  .payout-table-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .payout-row{ min-width:560px; }
+}
+
+/* components/legal/LegalPage.jsx — the "On this page" table of
+   contents switches to a 2-column CSS `columns` layout once a page has
+   more than 6 sections (e.g. /terms). Two columns of a numbered list at
+   phone width reads as a cramped double-narrow list; force back to a
+   single column below 480px. */
+@media(max-width:480px){
+  .legal-toc-list{ columns:1 !important; }
+}
+
+/* .auth-box (login/signup/forgot-password/reset-password) keeps its
+   40px desktop padding at every width — workable but tight once the
+   440px box itself has shrunk to fit a 320-375px phone. Trim padding
+   only below 480px; the box's max-width/centering is untouched. */
+@media(max-width:480px){
+  .auth-box{ padding:28px 20px; margin:48px auto; }
+}

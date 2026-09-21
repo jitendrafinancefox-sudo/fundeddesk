@@ -110,50 +110,87 @@ export default function OrdersPage() {
         </div>
       ) : (
         <>
-          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-            <table className="tbl num" style={{ minWidth: 780 }}>
-              <thead>
-                <tr>
-                  <th style={{ paddingLeft: 20 }}>Placed</th>
-                  <th>Plan</th>
-                  <th>Type</th>
-                  <th>Amount</th>
-                  <th>Payment ref (UTR)</th>
-                  <th style={{ paddingRight: 20 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((o) => {
-                  const sm = statusMeta(o.status);
-                  const evalLabel = EVAL_LABEL[o.eval_type] || getPlanTypeLabel(o.plans?.plan_type);
-                  const amount = o.fee_amount ?? o.plans?.fee ?? null;
-                  return (
-                    <tr key={o.id}>
-                      <td style={{ paddingLeft: 20 }} className="muted">{fmtDate(o.created_at)}</td>
-                      <td>
-                        {o.plans?.name || '—'}
-                        {o.plans?.capital != null && (
-                          <div className="muted" style={{ fontSize: 10.5 }}>{formatINR(o.plans.capital)} account</div>
-                        )}
-                      </td>
-                      <td><span className="tag tag-blue" style={{ fontSize: 10 }}>{evalLabel}</span></td>
-                      <td>
-                        {formatINR(amount)}
-                        {o.coupon_code && (
-                          <div className="muted" style={{ fontSize: 10.5 }}>
-                            {o.coupon_code}{o.discount_percent ? ` · ${o.discount_percent}% off` : ''}
-                          </div>
-                        )}
-                      </td>
-                      <td className="muted" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.utr || '—'}</td>
-                      <td style={{ paddingRight: 20 }}>
-                        <span className={'tag ' + sm.tag} style={{ fontSize: 10 }}>{sm.label}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="card" style={{ padding: 0 }}>
+            <div className="orders-table-wrap">
+              <table className="tbl num orders-table" style={{ minWidth: 780 }}>
+                <thead>
+                  <tr>
+                    <th style={{ paddingLeft: 20 }}>Placed</th>
+                    <th>Plan</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Payment ref (UTR)</th>
+                    <th style={{ paddingRight: 20 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o) => {
+                    const sm = statusMeta(o.status);
+                    const evalLabel = EVAL_LABEL[o.eval_type] || getPlanTypeLabel(o.plans?.plan_type);
+                    const amount = o.fee_amount ?? o.plans?.fee ?? null;
+                    return (
+                      <tr key={o.id}>
+                        <td style={{ paddingLeft: 20 }} className="muted">{fmtDate(o.created_at)}</td>
+                        <td>
+                          {o.plans?.name || '—'}
+                          {o.plans?.capital != null && (
+                            <div className="muted" style={{ fontSize: 10.5 }}>{formatINR(o.plans.capital)} account</div>
+                          )}
+                        </td>
+                        <td><span className="tag tag-blue" style={{ fontSize: 10 }}>{evalLabel}</span></td>
+                        <td>
+                          {formatINR(amount)}
+                          {o.coupon_code && (
+                            <div className="muted" style={{ fontSize: 10.5 }}>
+                              {o.coupon_code}{o.discount_percent ? ` · ${o.discount_percent}% off` : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td className="muted" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.utr || '—'}</td>
+                        <td style={{ paddingRight: 20 }}>
+                          <span className={'tag ' + sm.tag} style={{ fontSize: 10 }}>{sm.label}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* mobile cards — same desktop-table / mobile-card swap used by
+                Accounts / Payouts / Leaderboard */}
+            <div className="orders-cards">
+              {orders.map((o) => {
+                const sm = statusMeta(o.status);
+                const evalLabel = EVAL_LABEL[o.eval_type] || getPlanTypeLabel(o.plans?.plan_type);
+                const amount = o.fee_amount ?? o.plans?.fee ?? null;
+                return (
+                  <div key={o.id} style={{ padding: '13px 16px', borderBottom: '1px solid rgba(34,197,139,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontFamily: 'Manrope,sans-serif', fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {o.plans?.name || '—'}
+                        </div>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{fmtDate(o.created_at)}</div>
+                      </div>
+                      <span className={'tag ' + sm.tag} style={{ fontSize: 10, flexShrink: 0 }}>{sm.label}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 10 }}>
+                      <span className="tag tag-blue" style={{ fontSize: 10 }}>{evalLabel}</span>
+                      <b style={{ fontVariantNumeric: 'tabular-nums' }}>{formatINR(amount)}</b>
+                    </div>
+                    {o.coupon_code && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                        {o.coupon_code}{o.discount_percent ? ` · ${o.discount_percent}% off` : ''}
+                      </div>
+                    )}
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      UTR: {o.utr || '—'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* status legend — plain words, not colour-only */}

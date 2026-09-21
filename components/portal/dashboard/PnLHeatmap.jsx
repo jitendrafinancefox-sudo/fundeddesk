@@ -102,7 +102,7 @@ export default function PnLHeatmap({
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>P&L Heatmap</h3>
-            <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.03)', borderRadius: '99px', padding: '4px', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', background: 'rgba(255,255,255,0.03)', borderRadius: '99px', padding: '4px', border: '1px solid var(--border)' }}>
               {periods.map((p) => (
                 <button key={p} style={{ padding: '6px 12px', borderRadius: '99px', fontSize: '10.5px', fontWeight: 600, color: 'var(--muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}>{p}</button>
               ))}

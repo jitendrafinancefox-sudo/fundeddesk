@@ -118,7 +118,7 @@ function RowActions({ row, type, onSelect, onBuy, onSell }) {
     background: bg, color, display: 'grid', placeItems: 'center',
   });
   return (
-    <div style={{ display: 'flex', gap: 3 }} onClick={(e) => e.stopPropagation()}>
+    <div className="oc-row-actions" style={{ display: 'flex', gap: 3 }} onClick={(e) => e.stopPropagation()}>
       <button title={`Buy ${type}`} style={btn('var(--green)', '#052018')} onClick={() => onBuy?.(row, type)}>B</button>
       <button title={`Sell ${type}`} style={btn('var(--red)', '#fff')} onClick={() => onSell?.(row, type)}>S</button>
       <button title="Show on chart" style={btn(D.bgAlt, D.text)} onClick={() => onSelect?.(row, type)}>
@@ -158,6 +158,10 @@ export default function TVOptionChainDrawer({ open, chain, status, onRetry, unde
         zIndex: 120, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: T.font.family,
       }}
     >
+      {/* Touch devices get a bigger B/S/Chart hit target than the
+          mouse-tuned 20px row — the row height itself doesn't grow, only
+          the button. */}
+      <style>{'@media (pointer: coarse){ .oc-row-actions button{ min-height:30px!important; } }'}</style>
       {/* Header */}
       <div style={{
         padding: '10px 14px',
@@ -326,17 +330,25 @@ export default function TVOptionChainDrawer({ open, chain, status, onRetry, unde
                     <td style={{ ...col(isCESelected ? D.blue : D.up, D.upBg), fontWeight: 600, padding: hovered ? '3px 4px' : undefined }}>
                       {hovered
                         ? <RowActions row={row} type="CE" onSelect={onSelect} onBuy={onBuy} onSell={onSell} />
-                        : <span onClick={() => onSelect(row, 'CE')} style={{ display: 'block', cursor: 'pointer' }}>{fmtN(row.ce)}</span>}
+                        /* Tap-to-reveal (touch has no hover event, so this
+                           first tap only reveals B/S/Chart — same strike as
+                           `onMouseEnter` does for a mouse — a second tap on
+                           one of those buttons performs the action). Mouse
+                           users still get direct click-through since hover
+                           fires before any click reaches this span. */
+                        : <span onClick={() => setHoverStrike(row.strike)} style={{ display: 'block', cursor: 'pointer' }}>{fmtN(row.ce)}</span>}
                     </td>
                     <td onClick={() => onSelect(row, 'CE')} style={col(isCESelected ? D.blue : D.muted, D.upBg)}>{fmtN(row.ceDelta)}</td>
-                    <td style={{
-                      ...col(isATM ? D.amber : D.text),
-                      fontWeight: 700,
-                      borderLeft: D.borderThin,
-                      borderRight: D.borderThin,
-                      background: isATM ? D.blueBg : D.bgAlt,
-                      cursor: 'default',
-                    }}>
+                    <td
+                      onClick={() => setHoverStrike((s) => (s === row.strike ? null : row.strike))}
+                      style={{
+                        ...col(isATM ? D.amber : D.text),
+                        fontWeight: 700,
+                        borderLeft: D.borderThin,
+                        borderRight: D.borderThin,
+                        background: isATM ? D.blueBg : D.bgAlt,
+                        cursor: 'pointer',
+                      }}>
                       {fmtStrike(row.strike)}
                       {isATM && <div style={{ fontSize: 8, fontWeight: 700, color: D.amber, letterSpacing: '0.05em' }}>ATM</div>}
                     </td>
@@ -344,7 +356,7 @@ export default function TVOptionChainDrawer({ open, chain, status, onRetry, unde
                     <td style={{ ...col(isPESelected ? D.blue : D.down, D.downBg), fontWeight: 600, padding: hovered ? '3px 4px' : undefined }}>
                       {hovered
                         ? <RowActions row={row} type="PE" onSelect={onSelect} onBuy={onBuy} onSell={onSell} />
-                        : <span onClick={() => onSelect(row, 'PE')} style={{ display: 'block', cursor: 'pointer' }}>{fmtN(row.pe)}</span>}
+                        : <span onClick={() => setHoverStrike(row.strike)} style={{ display: 'block', cursor: 'pointer' }}>{fmtN(row.pe)}</span>}
                     </td>
                     <td onClick={() => onSelect(row, 'PE')} style={col(isPESelected ? D.blue : D.muted, D.downBg)}>{fmtQty(row.peOi)}</td>
                   </tr>

@@ -14,7 +14,7 @@ export default function TVChartLayout({ children }) {
 
   if (!ready) {
     return (
-      <div style={{ width: '100vw', height: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
+      <div style={{ width: '100%', height: '100dvh', display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--grad)', margin: '0 auto 14px' }} />
           <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>Loading terminal…</p>

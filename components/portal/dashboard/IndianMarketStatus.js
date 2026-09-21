@@ -182,7 +182,7 @@ export default function IndianMarketStatus({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'center' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>Market Hours</span>
-              <div style={{ display: 'flex', gap: '16px', fontSize: '12px', fontFamily: "'Manrope', sans-serif", fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: '12px', fontFamily: "'Manrope', sans-serif", fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: 'var(--text)' }}>Pre: {marketHours.preMarket}</span>
                 <span style={{ color: IS_MARKET_OPEN() ? 'var(--green)' : 'var(--text)' }}>Regular: {marketHours.regular}</span>
                 <span style={{ color: 'var(--muted)' }}>Post: {marketHours.postMarket}</span>
