@@ -49,7 +49,7 @@ export default function BuySellOverlay({ exchange = 'NSE', token, symbol, underl
   };
 
   return (
-    <div style={{
+    <div className="buy-sell-overlay" style={{
       position: 'absolute',
       top: 34,
       left: 10,

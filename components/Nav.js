@@ -95,7 +95,7 @@ export default function Nav() {
           {user && <Link href="/portal" className={linkOn('/portal')}>Dashboard</Link>}
           {isAdmin && <Link href="/admin" style={{ color: 'var(--gold)', fontWeight: 700 }}>Admin</Link>}
         </div>
-        <div className="nav-desktop-actions" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="nav-desktop-actions">
           {pathname !== '/' && <ThemeToggle />}
           {user ? (
             <button className="btn btn-secondary btn-sm" onClick={logout}>Log out</button>
@@ -105,6 +105,9 @@ export default function Nav() {
               <Link className="btn btn-primary btn-sm" href="/signup">Get Funded</Link>
             </>
           )}
+        </div>
+        <div className="nav-mobile-actions">
+          {!user && <Link className="btn btn-secondary btn-sm" href="/login">Log in</Link>}
         </div>
         <button
           ref={hamburgerRef}

@@ -603,7 +603,7 @@ export default function PortalShell({ children }) {
         }
 
         @media(max-width:1100px){
-          .portal-market-pill{display:none}
+          .portal-market-pill{display:none !important}
         }
 
         /* ---- Mobile shell: sidebar becomes an off-canvas drawer, never a

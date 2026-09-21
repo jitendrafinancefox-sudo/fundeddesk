@@ -106,14 +106,15 @@ export default function AccountSelector({
               {selectedAccount?.plans?.name || 'Select Account'}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="acct-selector-status" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             <span style={{
               width: '8px',
               height: '8px',
               borderRadius: '50%',
+              flexShrink: 0,
               background: selectedAccount?.status === 'active' ? 'var(--green)' : 'var(--muted)',
             }} />
-            <span style={{ fontSize: 10.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+            <span style={{ fontSize: 10.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, whiteSpace: 'nowrap' }}>
               {selectedAccount?.status?.toUpperCase() || 'NONE'}
             </span>
           </div>
@@ -123,9 +124,14 @@ export default function AccountSelector({
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
         >
-          <ChevronDown size={14} style={{ color: 'var(--muted)', transition: 'transform 0.2s' }} />
+          <ChevronDown size={14} style={{ color: 'var(--muted)', transition: 'transform 0.2s', flexShrink: 0 }} />
         </motion.div>
       </button>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media(max-width:600px){
+          .acct-selector-status{display:none !important}
+        }
+      `}} />
 
       <AnimatePresence>
         {isOpen && (

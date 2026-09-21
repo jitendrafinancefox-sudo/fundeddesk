@@ -198,11 +198,11 @@ export default function Home() {
           </span>
           <h1 style={{ maxWidth: 980, margin: '0 auto 24px', position: 'relative', zIndex: 2 }}>
             {"Prove Your Skill.".split(' ').map((w, i) => (
-              <span key={'a' + i} className="hero-word" style={{ animationDelay: (i * 80) + 'ms' }}>{w}&nbsp;</span>
+              <span key={'a' + i} className="hero-word" style={{ animationDelay: (i * 80) + 'ms' }}>{w}{' '}</span>
             ))}
             <br />
             {"Trade Our Capital.".split(' ').map((w, i) => (
-              <span key={'b' + i} className="hero-word grad-text" style={{ animationDelay: (300 + i * 80) + 'ms' }}>{w}&nbsp;</span>
+              <span key={'b' + i} className="hero-word grad-text" style={{ animationDelay: (300 + i * 80) + 'ms' }}>{w}{' '}</span>
             ))}
           </h1>
           <p className="body-lg hero-fade" style={{ maxWidth: 680, margin: '0 auto 48px', animationDelay: '620ms' }}>
@@ -619,9 +619,9 @@ export default function Home() {
           </div>
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <p className="disc" style={{ fontSize: 12.5 }}>© {new Date().getFullYear()} FundedDesk. All rights reserved.</p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
               <span className="label-muted" style={{ fontSize: 11 }}>Trading involves risk. Past performance ≠ future results.</span>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--muted)', transition: 'color var(--fast) var(--ease)' }}>Twitter</a>
                 <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--muted)', transition: 'color var(--fast) var(--ease)' }}>LinkedIn</a>
                 <a href="https://discord.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--muted)', transition: 'color var(--fast) var(--ease)' }}>Discord</a>

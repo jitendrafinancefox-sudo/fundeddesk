@@ -323,8 +323,10 @@ nav.top.scrolled{
   color:var(--brand);
   background:rgba(34,197,139,0.12);
 }
+.nav-desktop-actions{display:flex;gap:10px;align-items:center}
 
 /* === MOBILE NAV (hamburger + drawer) === */
+.nav-mobile-actions{display:none;align-items:center}
 .nav-hamburger{
   display:none;
   align-items:center;
@@ -336,6 +338,7 @@ nav.top.scrolled{
   background:rgba(255,255,255,0.02);
   color:var(--text);
   cursor:pointer;
+  flex-shrink:0;
 }
 .nav-hamburger:hover{border-color:var(--border-strong)}
 .nav-hamburger:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
@@ -385,7 +388,11 @@ nav.top.scrolled{
 }
 @media(max-width:768px){
   .nav-links,.nav-desktop-actions{display:none}
+  .nav-mobile-actions{display:flex}
   .nav-hamburger{display:inline-flex}
+  .nav-in{gap:10px}
+  .logo{font-size:17px}
+  .logo-mark{width:30px;height:30px;font-size:15px}
 }
 
 /* === PREMIUM BUTTONS === */
@@ -745,8 +752,10 @@ footer.foot{
 @media(max-width:768px){
   .grid3,.grid4,.grid2{grid-template-columns:1fr}
   section{padding:60px 0}
-  
+
   .mobile-menu-toggle { display: grid !important; }
+
+  .buy-sell-overlay{ position: static !important; top: auto !important; left: auto !important; margin: 2px 0 6px; pointer-events: auto !important; }
   
   .dashboard-shell > div > aside { 
     position: fixed; 

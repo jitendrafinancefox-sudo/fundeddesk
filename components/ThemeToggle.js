@@ -37,21 +37,33 @@ export default function ThemeToggle() {
   if (isLanding || !mounted) return null;
 
   return (
-    <button
-      onClick={toggle}
-      title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-      style={{
-        position: 'fixed', top: 78, right: 22, zIndex: 9999,
-        width: 46, height: 46, borderRadius: '50%',
-        border: '1px solid var(--line2)', background: 'var(--card)',
-        backdropFilter: 'blur(10px)', boxShadow: '0 8px 24px rgba(0,0,0,.15)',
-        display: 'grid', placeItems: 'center', cursor: 'pointer',
-        color: dark ? 'var(--muted)' : 'var(--gold)', transition: 'transform .15s',
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
-      onMouseLeave={(e) => (e.currentTarget.style.transform = 'none')}
-    >
-      {dark ? <Moon size={19} /> : <Sun size={19} />}
-    </button>
+    <>
+      <button
+        className="theme-toggle-btn"
+        onClick={toggle}
+        title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+        style={{
+          position: 'fixed', top: 78, right: 22, zIndex: 9999,
+          width: 46, height: 46, borderRadius: '50%',
+          border: '1px solid var(--line2)', background: 'var(--card)',
+          backdropFilter: 'blur(10px)', boxShadow: '0 8px 24px rgba(0,0,0,.15)',
+          display: 'grid', placeItems: 'center', cursor: 'pointer',
+          color: dark ? 'var(--muted)' : 'var(--gold)', transition: 'transform .15s',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
+        onMouseLeave={(e) => (e.currentTarget.style.transform = 'none')}
+      >
+        {dark ? <Moon size={19} /> : <Sun size={19} />}
+      </button>
+      {/* A hardcoded top:78 collides with in-app headers (e.g. the portal
+          topbar) once they wrap to two lines on narrow screens. Below that
+          breakpoint the toggle instead docks bottom-right, clear of every
+          header regardless of how many lines it wraps to. */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media(max-width:640px){
+          .theme-toggle-btn{ top:auto !important; bottom:18px !important; right:16px !important; width:42px !important; height:42px !important; }
+        }
+      `}} />
+    </>
   );
 }
