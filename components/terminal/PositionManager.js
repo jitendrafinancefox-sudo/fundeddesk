@@ -33,23 +33,18 @@ export default function PositionManager() {
   };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#ffffff', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', fontFamily: 'Inter, sans-serif' }}>
       {positions.length ? (
         <div className="terminal-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
             <thead>
               <tr style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <th style={th}>Symbol</th>
-                <th style={th}>Exchange</th>
-                <th style={th}>Direction</th>
+                <th style={th}>Type</th>
                 <th style={{ ...th, textAlign: 'right' }}>Qty</th>
                 <th style={{ ...th, textAlign: 'right' }}>Avg Price</th>
-                <th style={{ ...th, textAlign: 'right' }}>Current Price</th>
-                <th style={{ ...th, textAlign: 'right' }}>PnL</th>
-                <th style={{ ...th, textAlign: 'right' }}>MTM</th>
-                <th style={{ ...th, textAlign: 'right' }}>SL</th>
-                <th style={{ ...th, textAlign: 'right' }}>TP</th>
-                <th style={th}>Time</th>
+                <th style={{ ...th, textAlign: 'right' }}>LTP</th>
+                <th style={{ ...th, textAlign: 'right' }}>P&L</th>
                 <th style={th}>Actions</th>
               </tr>
             </thead>
@@ -83,76 +78,75 @@ export default function PositionManager() {
 
 function PosRows({ pos, pnl, editing, draft, setDraft, openEdit, apply, cancelEdit }) {
   const isEditing = editing?.id === pos.id;
-  const lotSize = lotSizeFor(pos.underlying);
+  // Match TradingStore's own addQty()/partialExit(): prefer this position's
+  // REAL lot size (its own qty/lots ratio, e.g. from the live option chain)
+  // over the generic fallback table, so the preview here never disagrees
+  // with what actually gets executed.
+  const lotSize = pos.lots ? pos.qty / pos.lots : lotSizeFor(pos.underlying);
 
   return (
     <>
       <tr style={{ transition: 'background 0.1s' }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = '#f8f9fa'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg2)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
       >
-        <td style={{ ...td, fontWeight: 600 }}>{pos.symbol}</td>
-        <td style={td}>{pos.exchange}</td>
+        <td style={{ ...td, fontWeight: 600 }}>
+          {pos.symbol}
+          <span style={{ color: 'var(--dim)', fontWeight: 500, marginLeft: 5 }}>{pos.exchange}</span>
+        </td>
         <td style={td}><Side side={pos.side} /></td>
-        <td style={{ ...td, textAlign: 'right' }}>{fmtQty(pos.qty)} <span style={{ color: '#b2b5be', fontSize: 10 }}>({pos.lots}L)</span></td>
+        <td style={{ ...td, textAlign: 'right' }}>{fmtQty(pos.qty)} <span style={{ color: 'var(--dim)', fontSize: 10 }}>({pos.lots}L)</span></td>
         <td style={{ ...td, textAlign: 'right' }}>{fmtNum(pos.avgPrice)}</td>
         <td style={{ ...td, textAlign: 'right' }}>
-          <span style={{ color: pos.currentPrice >= pos.avgPrice ? '#26a69a' : '#ef5350', fontWeight: 600 }}>{fmtNum(pos.currentPrice)}</span>
+          {/* Direction vs. entry is shown by color AND a glyph — never color
+              alone (Phase 20 accessibility fix). */}
+          <span style={{ color: pos.currentPrice >= pos.avgPrice ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+            <span aria-hidden="true">{pos.currentPrice >= pos.avgPrice ? '▲ ' : '▼ '}</span>
+            {fmtNum(pos.currentPrice)}
+          </span>
         </td>
         <td style={{ ...td, textAlign: 'right' }}><Pnl value={pnl} /></td>
-        <td style={{ ...td, textAlign: 'right' }}>{fmtNum(pos.currentPrice * pos.qty)}</td>
-        <td style={{ ...td, textAlign: 'right' }}>
-          {pos.sl != null
-            ? <span style={{ color: pos.side === 'BUY' ? '#ef5350' : '#26a69a', fontWeight: 600 }}>{fmtNum(pos.sl)}</span>
-            : <span style={{ color: '#b2b5be' }}>—</span>}
-        </td>
-        <td style={{ ...td, textAlign: 'right' }}>
-          {pos.tp != null
-            ? <span style={{ color: pos.side === 'BUY' ? '#26a69a' : '#ef5350', fontWeight: 600 }}>{fmtNum(pos.tp)}</span>
-            : <span style={{ color: '#b2b5be' }}>—</span>}
-        </td>
-        <td style={{ ...td, color: '#787b86' }}>{pos.opened}</td>
         <td style={td}>
-          <span style={{ display: 'flex', gap: 4 }}>
+          <span style={{ display: 'flex', gap: 3 }}>
             <button style={actionBtn} title="Modify SL/TP" onClick={() => openEdit(pos.id, 'modify', pos)}>
-              <SlidersHorizontal size={10} style={{ verticalAlign: '-1px' }} /> Modify
+              <SlidersHorizontal size={11} />
             </button>
             <button style={dangerBtn} title="Close position at market" onClick={() => TradingStore.closePosition(pos.id)}>
-              <XCircle size={10} style={{ verticalAlign: '-1px' }} /> Close
+              <XCircle size={11} />
             </button>
             <button style={actionBtn} title="Reverse direction" onClick={() => TradingStore.reversePosition(pos.id)}>
-              <ArrowLeftRight size={10} style={{ verticalAlign: '-1px' }} /> Reverse
+              <ArrowLeftRight size={11} />
             </button>
             <button style={ghostBtn} title={`Add qty (lot size ${lotSize})`} onClick={() => openEdit(pos.id, 'add', pos)}>
-              <Plus size={10} style={{ verticalAlign: '-1px' }} /> Add
+              <Plus size={11} />
             </button>
             <button style={ghostBtn} title="Partial exit" onClick={() => openEdit(pos.id, 'partial', pos)}>
-              <Scissors size={10} style={{ verticalAlign: '-1px' }} /> Partial
+              <Scissors size={11} />
             </button>
           </span>
         </td>
       </tr>
 
       {isEditing && (
-        <tr style={{ background: '#f8f9fa' }}>
-          <td colSpan={12} style={{ padding: '6px 10px', borderBottom: '1px solid #e0e3eb' }}>
+        <tr style={{ background: 'var(--bg2)' }}>
+          <td colSpan={7} style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11 }}>
-              <b style={{ color: '#2962ff', width: 110, fontSize: 10, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+              <b style={{ color: 'var(--blue)', width: 110, fontSize: 10, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
                 {editing.mode === 'modify' ? 'Modify SL / TP' : editing.mode === 'add' ? 'Add Qty' : 'Partial Exit'}
               </b>
               {editing.mode === 'modify' && (
                 <>
-                  <span style={{ color: '#787b86' }}>SL</span>
+                  <span style={{ color: 'var(--muted)' }}>SL</span>
                   <input type="number" step="0.05" placeholder="—" value={draft.sl} onChange={(e) => setDraft((d) => ({ ...d, sl: e.target.value }))} style={inputNum} />
-                  <span style={{ color: '#787b86' }}>TP</span>
+                  <span style={{ color: 'var(--muted)' }}>TP</span>
                   <input type="number" step="0.05" placeholder="—" value={draft.tp} onChange={(e) => setDraft((d) => ({ ...d, tp: e.target.value }))} style={inputNum} />
                 </>
               )}
               {(editing.mode === 'add' || editing.mode === 'partial') && (
                 <>
-                  <span style={{ color: '#787b86' }}>Lots</span>
+                  <span style={{ color: 'var(--muted)' }}>Lots</span>
                   <input type="number" min="1" step="1" placeholder="1" value={draft.lots} onChange={(e) => setDraft((d) => ({ ...d, lots: e.target.value }))} style={inputNum} />
-                  <span style={{ color: '#b2b5be', fontSize: 10 }}>× {lotSize} = {fmtQty((Number(draft.lots) || 0) * lotSize)} qty</span>
+                  <span style={{ color: 'var(--dim)', fontSize: 10 }}>× {lotSize} = {fmtQty((Number(draft.lots) || 0) * lotSize)} qty</span>
                 </>
               )}
               <span style={{ flex: 1 }} />

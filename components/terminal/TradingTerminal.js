@@ -24,6 +24,7 @@ import AlertManager from '@/components/terminal/AlertManager';
 import AlertNotifications from '@/components/terminal/AlertNotifications';
 import HotkeyManager from '@/components/terminal/Hotkeys';
 import StatusBar from '@/components/terminal/StatusBar';
+import SimulatorNotice from '@/components/terminal/SimulatorNotice';
 import { TradingStore } from '@/stores/TradingStore';
 import { INDEX_TOKEN, TIMEFRAMES } from './constants';
 
@@ -136,6 +137,7 @@ function TerminalContent() {
 
   return (
     <div ref={rootRef} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <SimulatorNotice />
       <TerminalActions rootRef={rootRef} activePane={activePane} getPrice={getPrice}>
         {(actions) => {
           actionsRef.current = actions;

@@ -74,15 +74,13 @@ export default function EntryBar({ chart, position }) {
 
   const startDrag = (which) => (e) => {
     if (drag || e.button !== 0) return;
+    const fallback = which === 'sl' ? position.sl : position.tp;
+    const price = Number.isFinite(Number(fallback)) ? Number(fallback) : Number(position.avgPrice);
+    if (!Number.isFinite(price)) return; // no valid price to anchor the drag to — bail rather than crash later
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    setDrag({
-      which,
-      startY: e.clientY,
-      moved: false,
-      price: which === 'sl' ? (position.sl ?? position.avgPrice) : (position.tp ?? position.avgPrice),
-    });
+    setDrag({ which, startY: e.clientY, moved: false, price });
   };
 
   const onDragMove = (e) => {

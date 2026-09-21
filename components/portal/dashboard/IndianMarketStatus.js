@@ -94,7 +94,6 @@ export default function IndianMarketStatus({
                 overflow: 'hidden',
               }}
             >
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(34,197,139,0.03) 0%, transparent 50%)', pointerEvents: 'none' }} />
               <div style={{ position: 'relative', zIndex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                   <div style={{ 
@@ -179,7 +178,7 @@ export default function IndianMarketStatus({
           ))}
         </div>
 
-        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', background: 'rgba(34,197,139,0.02)' }}>
+        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'center' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>Market Hours</span>

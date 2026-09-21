@@ -1,0 +1,21 @@
+{
+  "name": "FundedDesk",
+  "short_name": "FundedDesk",
+  "description": "India's premier funded trading firm for NIFTY & BANKNIFTY options traders",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#040806",
+  "theme_color": "#22C58B",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

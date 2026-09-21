@@ -143,7 +143,7 @@ export default function MarketSession({ isLoading = false }) {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px' }}>
-          <div style={{ padding: '14px', background: 'rgba(34,197,139,0.03)', borderRadius: '11px', border: '1px solid rgba(34,197,139,0.1)' }}>
+          <div style={{ padding: '14px', background: 'rgba(255,255,255,0.02)', borderRadius: '11px', border: '1px solid var(--border)' }}>
             <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '5px' }}>Indian Market Hours</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11.5px', fontFamily: "'Manrope', sans-serif", fontVariantNumeric: 'tabular-nums' }}>
               <span style={{ color: marketState.session === 'pre-market' ? 'var(--gold)' : marketState.session === 'open' ? 'var(--text)' : 'var(--muted)' }}>Pre-Market: 09:00 – 09:15</span>

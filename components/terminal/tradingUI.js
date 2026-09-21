@@ -5,35 +5,40 @@ import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 // Follows the terminal's light TradingView-style palette.
 
 export const TRADING_PALETTE = {
-  blue: '#2962ff',
-  up: '#26a69a',
-  down: '#ef5350',
-  text: '#222222',
-  muted: '#787b86',
-  dim: '#b2b5be',
-  border: '#e0e3eb',
-  bg: '#ffffff',
-  bgAlt: '#f8f9fa',
+  blue: 'var(--blue)',
+  up: 'var(--green)',
+  down: 'var(--red)',
+  text: 'var(--text)',
+  muted: 'var(--muted)',
+  dim: 'var(--dim)',
+  border: 'var(--border)',
+  bg: 'var(--surface)',
+  bgAlt: 'var(--bg2)',
 };
 
+// Row/header spacing (Phase 21C) — widened from '6px 10px' so the bottom
+// dock's tables (Positions/Orders/History/etc, all sharing this module)
+// have room to breathe once the dock itself has more vertical space; this
+// is presentation-only, no data or column changes.
 export const th = {
   textAlign: 'left',
-  padding: '6px 10px',
+  padding: '9px 14px',
   fontWeight: 600,
   fontSize: 11,
-  color: '#787b86',
-  borderBottom: '1px solid #e0e3eb',
-  background: '#f8f9fa',
+  color: 'var(--muted)',
+  borderBottom: '1px solid var(--border)',
+  background: 'var(--bg2)',
   fontFamily: 'Inter, sans-serif',
   whiteSpace: 'nowrap',
+  letterSpacing: '0.02em',
 };
 
 export const td = {
-  padding: '6px 10px',
-  borderBottom: '1px solid #e0e3eb',
-  fontSize: 11,
+  padding: '10px 14px',
+  borderBottom: '1px solid var(--border)',
+  fontSize: 11.5,
   fontWeight: 500,
-  color: '#222222',
+  color: 'var(--text)',
   fontVariantNumeric: 'tabular-nums',
   fontFamily: 'Inter, sans-serif',
   whiteSpace: 'nowrap',
@@ -43,10 +48,10 @@ export const fmtNum = (v, d = 2) => v == null ? '—' : Number(v).toLocaleString
 export const fmtQty = (v) => v == null ? '—' : Number(v).toLocaleString('en-IN');
 
 export function Pnl({ value, digits = 0, prefix = '' }) {
-  if (value == null) return <span style={{ color: '#787b86' }}>—</span>;
+  if (value == null) return <span style={{ color: 'var(--muted)' }}>—</span>;
   const positive = value >= 0;
   return (
-    <span style={{ color: positive ? '#26a69a' : '#ef5350', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+    <span style={{ color: positive ? 'var(--green)' : 'var(--red)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
       {positive ? '+' : ''}{prefix}{fmtNum(value, digits)}
     </span>
   );
@@ -58,7 +63,7 @@ export function Side({ side }) {
     <span style={{
       fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4,
       background: buy ? 'rgba(38,166,154,0.14)' : 'rgba(239,83,80,0.14)',
-      color: buy ? '#26a69a' : '#ef5350',
+      color: buy ? 'var(--green)' : 'var(--red)',
       letterSpacing: '0.02em',
     }}>
       {buy ? 'BUY' : 'SELL'}
@@ -68,17 +73,17 @@ export function Side({ side }) {
 
 export function DirIcon({ up }) {
   return up
-    ? <ArrowUpRight size={11} color="#26a69a" style={{ verticalAlign: '-2px' }} />
-    : <ArrowDownRight size={11} color="#ef5350" style={{ verticalAlign: '-2px' }} />;
+    ? <ArrowUpRight size={11} color="var(--green)" style={{ verticalAlign: '-2px' }} />
+    : <ArrowDownRight size={11} color="var(--red)" style={{ verticalAlign: '-2px' }} />;
 }
 
 export function StatusBadge({ status, reason }) {
   const map = {
-    pending: { bg: 'rgba(242,153,74,0.14)', fg: '#f2994a', label: 'Pending' },
-    executed: { bg: 'rgba(41,98,255,0.1)', fg: '#2962ff', label: 'Executed' },
-    completed: { bg: 'rgba(38,166,154,0.14)', fg: '#26a69a', label: 'Completed' },
-    cancelled: { bg: 'rgba(120,123,134,0.12)', fg: '#787b86', label: 'Cancelled' },
-    rejected: { bg: 'rgba(239,83,80,0.14)', fg: '#ef5350', label: 'Rejected' },
+    pending: { bg: 'rgba(242,153,74,0.14)', fg: 'var(--gold)', label: 'Pending' },
+    executed: { bg: 'rgba(41,98,255,0.1)', fg: 'var(--blue)', label: 'Executed' },
+    completed: { bg: 'rgba(38,166,154,0.14)', fg: 'var(--green)', label: 'Completed' },
+    cancelled: { bg: 'rgba(120,123,134,0.12)', fg: 'var(--muted)', label: 'Cancelled' },
+    rejected: { bg: 'rgba(239,83,80,0.14)', fg: 'var(--red)', label: 'Rejected' },
   };
   const s = map[status] || map.pending;
   return (
@@ -99,14 +104,14 @@ export const actionBtn = {
   border: 'none',
   cursor: 'pointer',
   background: 'rgba(41,98,255,0.08)',
-  color: '#2962ff',
+  color: 'var(--blue)',
   fontFamily: 'Inter, sans-serif',
 };
 
 export const dangerBtn = {
   ...actionBtn,
   background: 'rgba(239,83,80,0.08)',
-  color: '#ef5350',
+  color: 'var(--red)',
 };
 
 export const ghostBtn = {
@@ -114,22 +119,27 @@ export const ghostBtn = {
   borderRadius: 4,
   fontSize: 10,
   fontWeight: 600,
-  border: '1px solid #e0e3eb',
+  border: '1px solid var(--border)',
   cursor: 'pointer',
-  background: '#ffffff',
-  color: '#787b86',
+  background: 'var(--bg2)',
+  color: 'var(--muted)',
   fontFamily: 'Inter, sans-serif',
 };
 
 export const field = {
   padding: '4px 8px',
-  border: '1px solid #e0e3eb',
+  border: '1px solid var(--border)',
   borderRadius: 5,
   fontSize: 11,
   fontFamily: 'Inter, sans-serif',
-  color: '#222222',
-  outline: 'none',
-  background: '#ffffff',
+  color: 'var(--text)',
+  // No outline:'none' here (Phase 20 accessibility fix) — this is a plain
+  // inline style object, not a CSS class, so there's no way to pair a
+  // suppressed outline with a :focus-visible replacement without a larger
+  // change; leaving the browser's native focus outline visible is the
+  // smallest correct fix for keyboard-focus visibility on every field that
+  // uses this shared style.
+  background: 'var(--bg2)',
   width: 90,
   fontVariantNumeric: 'tabular-nums',
 };
@@ -138,7 +148,7 @@ export const inputNum = { ...field, textAlign: 'right' };
 
 export function EmptyState({ icon, text }) {
   return (
-    <div style={{ padding: 26, textAlign: 'center', color: '#787b86', fontSize: 11, fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ padding: 26, textAlign: 'center', color: 'var(--muted)', fontSize: 11, fontFamily: 'Inter, sans-serif' }}>
       {icon ? <div style={{ opacity: 0.5, marginBottom: 6 }}>{icon}</div> : null}
       {text}
     </div>

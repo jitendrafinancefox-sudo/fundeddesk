@@ -246,105 +246,45 @@ export default function PerformanceAnalytics({
               style={{ width: '100%', minWidth: 0, height: 240, position: 'relative', borderRadius: 'var(--r)', overflow: 'hidden' }}
             />
           ) : (
-            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--r)', background: 'rgba(255,255,255,0.02)', textAlign: 'center', padding: '16px' }}>
-              <p style={{ margin: 0, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, maxWidth: 280 }}>
+            <div style={{ padding: '10px 4px', textAlign: 'left' }}>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>
                 No performance history available yet — at least two months of trading are needed.
               </p>
             </div>
           )}
         </div>
 
-        {/* Metrics Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '14px' }}>
-          {metrics.map((metric, i) => (
-            <motion.div
-              key={metric.key}
-              className="card"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.05 + i * 0.04, ease: [0.19, 1, 0.22, 1] }}
-              style={{ 
-                padding: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                position: 'relative',
-              }}
-            >
-              <div style={{ position: 'relative', zIndex: 1 }}>
-                <motion.span
-                  className="eyebrow"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: 0.1 }}
-                >
-                  {metric.label}
-                </motion.span>
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.15 }}
-                  style={{ marginTop: '6px', marginBottom: '6px' }}
-                >
-                  <span style={{ 
-                    fontFamily: "'Unbounded', 'Manrope', sans-serif", 
-                    fontWeight: 800, 
-                    fontSize: 'clamp(18px, 2.2vw, 22px)', 
-                    lineHeight: 1.1, 
-                    color: metric.color,
-                    fontVariantNumeric: 'tabular-nums',
-                    letterSpacing: '-0.01em',
-                  }}>
-                    {formatValue(metric)}
-                  </span>
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.2 }}
-                  style={{ fontSize: '9.5px', color: 'var(--muted)', fontFamily: "'Manrope', sans-serif" }}
-                >
-                  {metric.description}
-                </motion.div>
-              </div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.25 }}
-                style={{
-                  marginTop: 'auto',
-                  paddingTop: '8px',
-                  borderTop: '1px solid var(--border)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: '9px',
-                  fontFamily: "'Manrope', sans-serif",
-                }}
+        {/* Metrics grid — compact label + value cells, 3 columns. The
+            benchmark comparison collapses to a single colored dot next to
+            the label instead of a separate footer row/description line. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+          {metrics.map((metric) => {
+            const status = getBenchmarkStatus(metric);
+            const dotColor = status === 'good' ? 'var(--green)' : status === 'warn' ? 'var(--gold)' : status === 'bad' ? 'var(--red)' : 'var(--dim)';
+            return (
+              <div
+                key={metric.key}
+                className="card"
+                style={{ padding: '9px 11px', minWidth: 0 }}
               >
-                <span style={{ 
-                  color: getBenchmarkStatus(metric) === 'good' ? 'var(--green)' : getBenchmarkStatus(metric) === 'warn' ? 'var(--gold)' : 'var(--red)',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4 }}>
+                  <span className="eyebrow" style={{ marginBottom: 0, fontSize: 9 }}>{metric.label}</span>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, background: dotColor }} />
+                </div>
+                <span style={{
+                  fontFamily: "'Unbounded', 'Manrope', sans-serif",
+                  fontWeight: 800,
+                  fontSize: 'clamp(15px, 1.6vw, 17px)',
+                  lineHeight: 1.15,
+                  color: metric.color,
+                  fontVariantNumeric: 'tabular-nums',
+                  letterSpacing: '-0.01em',
                 }}>
-                  {getBenchmarkStatus(metric) === 'good' && <span style={{ fontSize: '9.5px' }}>✓</span>}
-                  {getBenchmarkStatus(metric) === 'warn' && <span style={{ fontSize: '9.5px' }}>⚠</span>}
-                  {getBenchmarkStatus(metric) === 'bad' && <span style={{ fontSize: '9.5px' }}>✗</span>}
-                  Benchmark: {metric.benchmark}
+                  {formatValue(metric)}
                 </span>
-                <div style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  flexShrink: 0,
-                  background: getBenchmarkStatus(metric) === 'good' ? 'var(--green)' : getBenchmarkStatus(metric) === 'warn' ? 'var(--gold)' : 'var(--red)',
-                }} />
-              </motion.div>
-            </motion.div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

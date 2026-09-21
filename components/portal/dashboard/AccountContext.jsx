@@ -150,27 +150,17 @@ export default function AccountContext({ account, plan, trades = [], softBreache
   const dailyDD = num(rules.dailyDrawdownPct);
   const maxDDLimit = num(rules.maximumDrawdownPct);
 
+  {/* Profit Target and Max Drawdown are already the page's KPI-row cards
+      (and Profit Target has its own progress bar just above this grid) —
+      not repeated here. Only the real, unique-to-this-card rule stats
+      remain: Daily Drawdown, Profitable Days, Inactivity, Soft Breaches. */}
   const KPIS = [
-    {
-      label: 'Profit Target',
-      current: pctStr(profitPct, true),
-      target: targetPct != null ? `${targetPct}%` : 'No target',
-      status: targetPct == null || !fin(profitPct) ? 'progress' : profitPct >= targetPct ? 'pass' : 'progress',
-      color: C.pass,
-    },
     {
       label: 'Daily Drawdown',
       current: pctStr(todayPnlPct, true),
       target: dailyDD != null ? `-${dailyDD}%` : null,
       status: dailyDD == null || !fin(todayPnlPct) ? 'safe' : Math.abs(todayPnlPct) < dailyDD ? 'safe' : 'warning',
       color: dailyDD == null || !fin(todayPnlPct) ? 'var(--text)' : Math.abs(todayPnlPct) < dailyDD ? C.pass : C.breach,
-    },
-    {
-      label: 'Max Drawdown',
-      current: pctStr(maxDD),
-      target: maxDDLimit != null ? `${maxDDLimit}%` : null,
-      status: maxDDLimit == null || !fin(maxDD) ? 'safe' : maxDD < maxDDLimit ? 'safe' : 'warning',
-      color: maxDDLimit == null || !fin(maxDD) ? 'var(--text)' : maxDD < maxDDLimit ? C.pass : C.breach,
     },
     {
       label: 'Profitable Days',
@@ -486,12 +476,14 @@ export default function AccountContext({ account, plan, trades = [], softBreache
             }}
           >
             <span>Active Rules Summary</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transition: 'transform 0.2s', flexShrink: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transition: 'transform 0.2s', flexShrink: 0, transform: 'rotate(-90deg)' }}>
               <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
+          {/* Collapsed by default — this must never auto-open on page load or
+              account switch; only the click handler above toggles it. */}
           <div style={{
-            display: 'grid',
+            display: 'none',
             gridTemplateColumns: 'repeat(auto-fill, minmax(232px, 1fr))',
             gap: '10px',
             marginTop: '10px',

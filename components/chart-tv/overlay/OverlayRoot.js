@@ -330,7 +330,11 @@ export function createOverlayRoot({
     redo() { if (history.redo()) selection.prune(registry.ids()); },
     canUndo: () => history.canUndo(),
     canRedo: () => history.canRedo(),
-    clearAll() { interaction.clearAll(); },
+    // Force a full-canvas repaint on every layer after clearing, as a
+    // guaranteed sweep of any stale pixels a prior partial (dirty-rect)
+    // repaint may have left behind — belt-and-suspenders on top of
+    // interaction.clearAll()'s own (usually sufficient) full invalidate.
+    clearAll() { interaction.clearAll(); invalidate('full'); },
     deleteSelected() { interaction.delete(); },
     duplicate() { interaction.duplicate(); },
     invalidate() { invalidate('full'); },

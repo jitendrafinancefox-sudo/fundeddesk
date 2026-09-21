@@ -60,6 +60,7 @@ export default function TradeHistory() {
       PnL: t.pnl.toFixed(2),
       PnLPct: t.pnlPct != null ? t.pnlPct.toFixed(2) : '',
       Reason: t.reason,
+      OrderID: t.orderId || '',
     }));
     if (!rows.length) return;
     const headers = Object.keys(rows[0]);
@@ -74,12 +75,12 @@ export default function TradeHistory() {
   };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#ffffff', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', fontFamily: 'Inter, sans-serif' }}>
       {/* Filters */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid #e0e3eb', flexShrink: 0, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: '#787b86', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Filters</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Filters</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Search size={11} color="#b2b5be" />
+          <Search size={11} color="var(--dim)" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -93,7 +94,7 @@ export default function TradeHistory() {
             <button key={r.id} onClick={() => setRange(r.id)} style={{
               padding: '3px 9px', borderRadius: 5, fontSize: 10.5, fontWeight: 600, border: 'none', cursor: 'pointer',
               background: range === r.id ? 'rgba(41,98,255,0.1)' : 'transparent',
-              color: range === r.id ? '#2962ff' : '#787b86',
+              color: range === r.id ? 'var(--blue)' : 'var(--muted)',
             }}>{r.label}</button>
           ))}
         </span>
@@ -103,14 +104,14 @@ export default function TradeHistory() {
             <button key={id} onClick={() => setResult(id)} style={{
               padding: '3px 9px', borderRadius: 5, fontSize: 10.5, fontWeight: 600, border: 'none', cursor: 'pointer',
               background: result === id ? 'rgba(38,166,154,0.12)' : 'transparent',
-              color: result === id ? '#26a69a' : '#787b86',
+              color: result === id ? 'var(--green)' : 'var(--muted)',
             }}>{label}</button>
           ))}
         </span>
         <span style={{ flex: 1 }} />
         <button onClick={exportCSV} style={{
           padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          border: '1px solid #2962ff', background: '#2962ff', color: '#ffffff',
+          border: '1px solid var(--blue)', background: 'var(--blue)', color: '#ffffff',
           display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Inter, sans-serif',
         }}>
           Export CSV
@@ -119,14 +120,14 @@ export default function TradeHistory() {
 
       {/* Summary chips */}
       {stats && (
-        <div style={{ display: 'flex', gap: 16, padding: '7px 12px', borderBottom: '1px solid #e0e3eb', flexShrink: 0, fontSize: 11 }}>
+        <div style={{ display: 'flex', gap: 16, padding: '7px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, fontSize: 11 }}>
           <Chip label="Trades" value={stats.total} />
-          <Chip label="Wins" value={stats.wins} color="#26a69a" />
-          <Chip label="Losses" value={stats.losses} color="#ef5350" />
-          <Chip label="Win rate" value={`${stats.winRate.toFixed(0)}%`} color={stats.winRate >= 50 ? '#26a69a' : '#f2994a'} />
-          <Chip label="Gross profit" value={fmtINR(stats.grossProfit)} color="#26a69a" />
-          <Chip label="Gross loss" value={fmtINR(stats.grossLoss)} color="#ef5350" />
-          <Chip label="Net P&L" value={fmtINR(stats.net)} color={stats.net >= 0 ? '#26a69a' : '#ef5350'} bold />
+          <Chip label="Wins" value={stats.wins} color="var(--green)" />
+          <Chip label="Losses" value={stats.losses} color="var(--red)" />
+          <Chip label="Win rate" value={`${stats.winRate.toFixed(0)}%`} color={stats.winRate >= 50 ? 'var(--green)' : 'var(--gold)'} />
+          <Chip label="Gross profit" value={fmtINR(stats.grossProfit)} color="var(--green)" />
+          <Chip label="Gross loss" value={fmtINR(stats.grossLoss)} color="var(--red)" />
+          <Chip label="Net P&L" value={fmtINR(stats.net)} color={stats.net >= 0 ? 'var(--green)' : 'var(--red)'} bold />
         </div>
       )}
 
@@ -144,15 +145,16 @@ export default function TradeHistory() {
                 <th style={{ ...th, textAlign: 'right' }}>PnL</th>
                 <th style={{ ...th, textAlign: 'right' }}>PnL %</th>
                 <th style={th}>Reason</th>
+                <th style={th}>Order</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((t) => (
                 <tr key={t.id} style={{ transition: 'background 0.1s' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f8f9fa'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg2)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <td style={{ ...td, color: '#787b86' }}>{t.time}</td>
+                  <td style={{ ...td, color: 'var(--muted)' }}>{t.time}</td>
                   <td style={{ ...td, fontWeight: 600 }}>{t.symbol}</td>
                   <td style={td}><Side side={t.side} /></td>
                   <td style={{ ...td, textAlign: 'right' }}>{fmtQty(t.qty)}</td>
@@ -160,16 +162,17 @@ export default function TradeHistory() {
                   <td style={{ ...td, textAlign: 'right' }}>{fmtNum(t.exit)}</td>
                   <td style={{ ...td, textAlign: 'right' }}><Pnl value={t.pnl} /></td>
                   <td style={{ ...td, textAlign: 'right' }}>
-                    <span style={{ color: t.pnl >= 0 ? '#26a69a' : '#ef5350' }}>{t.pnlPct >= 0 ? '+' : ''}{fmtNum(t.pnlPct)}%</span>
+                    <span style={{ color: t.pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>{t.pnlPct >= 0 ? '+' : ''}{fmtNum(t.pnlPct)}%</span>
                   </td>
-                  <td style={{ ...td, color: '#787b86', fontWeight: 600 }}>{t.reason}</td>
+                  <td style={{ ...td, color: 'var(--muted)', fontWeight: 600 }}>{t.reason}</td>
+                  <td style={{ ...td, color: 'var(--dim)', fontSize: 10 }} title={t.orderId || ''}>{t.orderId ? t.orderId.slice(-8) : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : (
-        <div style={{ padding: 26, textAlign: 'center', color: '#787b86', fontSize: 11 }}>
+        <div style={{ padding: 26, textAlign: 'center', color: 'var(--muted)', fontSize: 11 }}>
           <ScrollText size={20} style={{ opacity: 0.4, marginBottom: 6 }} />
           No trades match the current filters.
         </div>
@@ -181,8 +184,8 @@ export default function TradeHistory() {
 function Chip({ label, value, color, bold }) {
   return (
     <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-      <span style={{ color: '#787b86', fontSize: 10 }}>{label}</span>
-      <b style={{ color: color || '#222222', fontWeight: bold ? 700 : 600, fontVariantNumeric: 'tabular-nums' }}>{value}</b>
+      <span style={{ color: 'var(--muted)', fontSize: 10 }}>{label}</span>
+      <b style={{ color: color || 'var(--text)', fontWeight: bold ? 700 : 600, fontVariantNumeric: 'tabular-nums' }}>{value}</b>
     </span>
   );
 }

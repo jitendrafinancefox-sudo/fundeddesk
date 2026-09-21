@@ -38,7 +38,13 @@ export default function Signup() {
         <div className="field"><label>Email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" /></div>
         <div className="field"><label>Password</label><input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Min 6 characters" /></div>
         <button className="btn btn-grad" style={{ width: '100%' }} onClick={submit} disabled={busy}>{busy ? 'Creating…' : 'Create Account'}</button>
-        <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 18, textAlign: 'center' }}>
+        <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 12, textAlign: 'center', lineHeight: 1.5 }}>
+          By creating an account you agree to the{' '}
+          <Link href="/terms" style={{ color: 'var(--blue)' }}>Terms of Service</Link>,{' '}
+          <Link href="/privacy" style={{ color: 'var(--blue)' }}>Privacy Policy</Link> and{' '}
+          <Link href="/risk-disclosure" style={{ color: 'var(--blue)' }}>Risk Disclosure</Link> (currently drafts).
+        </p>
+        <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 14, textAlign: 'center' }}>
           Already have an account? <Link href="/login" style={{ color: 'var(--blue)' }}>Log in</Link>
         </p>
       </div>

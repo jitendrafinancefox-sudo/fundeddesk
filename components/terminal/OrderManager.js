@@ -25,16 +25,17 @@ export default function OrderManager() {
   const counts = (id) => (id === 'all' ? orders.length : orders.filter((o) => o.status === id).length);
   const visible = section === 'all' ? orders : orders.filter((o) => o.status === section);
 
-  const beginEdit = (order) => { setEditingId(order.id); setQtyDraft(String(order.qty)); };
+  const [priceDraft, setPriceDraft] = useState('');
+  const beginEdit = (order) => { setEditingId(order.id); setQtyDraft(String(order.qty)); setPriceDraft(order.limitPrice != null ? String(order.limitPrice) : ''); };
   const saveEdit = () => {
-    if (editingId) TradingStore.modifyOrder(editingId, { qty: Number(qtyDraft) });
+    if (editingId) TradingStore.modifyOrder(editingId, { qty: Number(qtyDraft), limitPrice: priceDraft ? Number(priceDraft) : undefined });
     setEditingId(null);
   };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#ffffff', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', fontFamily: 'Inter, sans-serif' }}>
       {/* Section segmented control */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 10px', borderBottom: '1px solid #e0e3eb', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         {SECTIONS.map((s) => (
           <button
             key={s.id}
@@ -48,7 +49,7 @@ export default function OrderManager() {
               border: 'none',
               cursor: 'pointer',
               background: section === s.id ? 'rgba(41,98,255,0.1)' : 'transparent',
-              color: section === s.id ? '#2962ff' : '#787b86',
+              color: section === s.id ? 'var(--blue)' : 'var(--muted)',
               display: 'flex',
               alignItems: 'center',
               gap: 5,
@@ -58,8 +59,8 @@ export default function OrderManager() {
             <span style={{
               fontSize: 10,
               fontWeight: 700,
-              background: section === s.id ? '#2962ff' : '#e4e7ee',
-              color: section === s.id ? '#ffffff' : '#787b86',
+              background: section === s.id ? 'var(--blue)' : 'var(--border)',
+              color: section === s.id ? '#ffffff' : 'var(--muted)',
               borderRadius: 8,
               padding: '0 5px',
             }}>
@@ -68,7 +69,7 @@ export default function OrderManager() {
           </button>
         ))}
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 10, color: '#b2b5be' }}>{visible.length} order{visible.length === 1 ? '' : 's'}</span>
+        <span style={{ fontSize: 10, color: 'var(--dim)' }}>{visible.length} order{visible.length === 1 ? '' : 's'}</span>
       </div>
 
       {visible.length ? (
@@ -78,8 +79,9 @@ export default function OrderManager() {
               <tr style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <th style={th}>Symbol</th>
                 <th style={th}>Side</th>
+                <th style={th}>Type</th>
                 <th style={{ ...th, textAlign: 'right' }}>Qty</th>
-                <th style={{ ...th, textAlign: 'right' }}>Signal Price</th>
+                <th style={{ ...th, textAlign: 'right' }}>Price</th>
                 <th style={{ ...th, textAlign: 'right' }}>SL / TP</th>
                 <th style={{ ...th, textAlign: 'right' }}>Margin</th>
                 <th style={th}>Time</th>
@@ -91,26 +93,33 @@ export default function OrderManager() {
               {visible.map((order) => (
                 <tr key={order.id}
                   style={{ transition: 'background 0.1s' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f8f9fa'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg2)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
                   <td style={{ ...td, fontWeight: 600 }}>{order.symbol}</td>
                   <td style={td}><Side side={order.side} /></td>
+                  <td style={{ ...td, color: 'var(--muted)', fontWeight: 600 }}>{order.orderType || 'MARKET'}</td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     {editingId === order.id ? (
                       <input type="number" min="1" value={qtyDraft} onChange={(e) => setQtyDraft(e.target.value)} style={{ ...field, width: 70, textAlign: 'right' }} />
                     ) : (
-                      <>{fmtQty(order.qty)} <span style={{ color: '#b2b5be', fontSize: 10 }}>({order.lots}L)</span></>
+                      <>{fmtQty(order.qty)} <span style={{ color: 'var(--dim)', fontSize: 10 }}>({order.lots}L)</span></>
                     )}
                   </td>
-                  <td style={{ ...td, textAlign: 'right' }}>{fmtNum(order.signalPrice)}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    {editingId === order.id && order.orderType === 'LIMIT' ? (
+                      <input type="number" step="0.05" value={priceDraft} onChange={(e) => setPriceDraft(e.target.value)} style={{ ...field, width: 70, textAlign: 'right' }} />
+                    ) : (
+                      fmtNum(order.orderType === 'LIMIT' ? order.limitPrice : order.signalPrice)
+                    )}
+                  </td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     {order.sl != null || order.tp != null
-                      ? <span style={{ color: '#787b86' }}>{order.sl != null ? fmtNum(order.sl) : '—'} / {order.tp != null ? fmtNum(order.tp) : '—'}</span>
-                      : <span style={{ color: '#b2b5be' }}>—</span>}
+                      ? <span style={{ color: 'var(--muted)' }}>{order.sl != null ? fmtNum(order.sl) : '—'} / {order.tp != null ? fmtNum(order.tp) : '—'}</span>
+                      : <span style={{ color: 'var(--dim)' }}>—</span>}
                   </td>
                   <td style={{ ...td, textAlign: 'right' }}>{fmtNum(order.margin, 0)}</td>
-                  <td style={{ ...td, color: '#787b86' }}>{order.time}</td>
+                  <td style={{ ...td, color: 'var(--muted)' }}>{order.time}</td>
                   <td style={td}><StatusBadge status={order.status} reason={order.rejectReason} /></td>
                   <td style={td}>
                     <span style={{ display: 'flex', gap: 4 }}>

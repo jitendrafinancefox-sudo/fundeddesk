@@ -1,0 +1,42 @@
+-- ============================================================
+-- Retire the pre-idempotency admin_add_trade signature  ·  Batch 23b
+-- DEPLOYMENT STAGE: C, step 1 of 2 (Phase 17 review fix)
+--
+-- DO NOT APPLY THIS FILE UNTIL BOTH OF THE FOLLOWING ARE TRUE:
+--   1. supabase/trade-request-idempotency.sql (Stage A) has been applied,
+--      so public.admin_add_trade(uuid,text,text,bigint,uuid) — the new
+--      5-argument, request_id-aware version — already exists live.
+--   2. The frontend that calls admin_add_trade (currently only
+--      app/admin/page.js) has been deployed and confirmed to be calling
+--      the 5-argument version — i.e. no request in your logs/monitoring
+--      is still calling admin_add_trade with only 4 arguments. This is a
+--      deployment/observability check, not something this SQL file can
+--      verify for you.
+--
+-- WHY THIS IS ITS OWN FILE, APPLIED LATER
+--   The original Batch 23 migration dropped the old 4-argument
+--   admin_add_trade in the SAME statement batch that created the new
+--   5-argument one. That is unsafe for a real deployment: if Stage A's
+--   SQL is applied before the new frontend code has actually rolled out
+--   everywhere (a stale browser tab, a CDN/edge cache, a slow rollout),
+--   any caller still sending the old 4-argument shape would immediately
+--   start failing with "could not find function" — a self-inflicted
+--   outage with no benefit, since the 4-argument function was harmless to
+--   leave running in the meantime (it already had its own is_admin()
+--   check and its own — non-idempotent — atomic trade+equity transaction
+--   from Batch 22; it just doesn't have replay protection). Splitting the
+--   drop into its own, later-applied file removes that whole failure
+--   window. See supabase/trade-request-idempotency.sql's header for the
+--   full A/B/C staging.
+--
+-- WHAT THIS DOES
+--   Drops exactly one function: the old
+--   public.admin_add_trade(uuid, text, text, bigint). The new 5-argument
+--   version, its grants, and the request_id column/index are all
+--   untouched — this file has no effect on them.
+--
+-- SAFE TO RUN REPEATEDLY: `drop function if exists` is a no-op if the
+-- function is already gone (e.g. if this file is accidentally run twice).
+-- ============================================================
+
+drop function if exists public.admin_add_trade(uuid, text, text, bigint);

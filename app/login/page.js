@@ -13,7 +13,16 @@ export default function Login() {
     setErr(''); setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
     setBusy(false);
-    if (error) return setErr(error.message);
+    if (error) {
+      // AuthRetryableFetchError means the request never reached the server (DNS/network
+      // failure) — distinct from the server rejecting real credentials. Surfacing the raw
+      // "Failed to fetch" wording there isn't wrong, just unclear about what actually
+      // happened; every other error (wrong password, etc.) is shown exactly as returned.
+      if (error.name === 'AuthRetryableFetchError') {
+        return setErr('Unable to reach the server. Check your connection and try again.');
+      }
+      return setErr(error.message);
+    }
     window.location.href = '/portal';
   }
 

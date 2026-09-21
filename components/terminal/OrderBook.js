@@ -50,26 +50,26 @@ export default function OrderBook({ token, kind, showBidAsk = true }) {
 
   if (!book) {
     return (
-      <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#787b86', fontSize: 11, fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--muted)', fontSize: 11, fontFamily: 'Inter, sans-serif' }}>
         Waiting for live price…
       </div>
     );
   }
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#ffffff', fontFamily: 'Inter, sans-serif' }}>
-      <div style={{ padding: '8px 14px', borderBottom: '1px solid #e0e3eb', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#787b86', flexShrink: 0 }}>
-        <BookOpen size={13} color="#2962ff" />
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>
+        <BookOpen size={13} color="var(--blue)" />
         Order Book
         <span style={{ flex: 1 }} />
-        <span style={{ color: '#787b86' }}>
-          Spread <b style={{ color: '#222222' }}>{fmtNum(book.spread)}</b>
+        <span style={{ color: 'var(--muted)' }}>
+          Spread <b style={{ color: 'var(--text)' }}>{fmtNum(book.spread)}</b>
         </span>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
         {/* Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: showBidAsk ? '1fr 1fr 1fr 1fr' : '1fr 1fr', background: '#f8f9fa', borderBottom: '1px solid #e0e3eb', flexShrink: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: showBidAsk ? '1fr 1fr 1fr 1fr' : '1fr 1fr', background: 'var(--bg2)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <span style={th}>Bid Qty</span>
           {showBidAsk && <span style={{ ...th, textAlign: 'right' }}>Bid Price</span>}
           {showBidAsk && <span style={{ ...th, textAlign: 'right' }}>Ask Price</span>}
@@ -99,7 +99,7 @@ function LadderRow({ side, isBest, price, qty, showBidAsk = true }) {
         gridTemplateColumns: showBidAsk ? '1fr 1fr 1fr 1fr' : '1fr 1fr',
         fontVariantNumeric: 'tabular-nums',
         fontSize: 11,
-        borderBottom: '1px solid #f1f2f6',
+        borderBottom: '1px solid var(--bg2)',
         background: isBest ? (bid ? 'rgba(38,166,154,0.1)' : 'rgba(239,83,80,0.1)') : 'transparent',
         position: 'relative',
       }}
@@ -111,10 +111,10 @@ function LadderRow({ side, isBest, price, qty, showBidAsk = true }) {
         background: bid ? 'rgba(38,166,154,0.08)' : 'rgba(239,83,80,0.08)',
         pointerEvents: 'none',
       }} />
-      <span style={{ ...cellStyle, color: bid ? '#222222' : 'transparent' }}>{fmtQty(qty)}</span>
-      {showBidAsk && <span style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: bid ? '#26a69a' : 'transparent' }}>{fmtNum(price)}</span>}
-      {showBidAsk && <span style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: !bid ? '#ef5350' : 'transparent' }}>{fmtNum(price)}</span>}
-      <span style={{ ...cellStyle, textAlign: 'right', color: !bid ? '#222222' : 'transparent' }}>{fmtQty(qty)}</span>
+      <span style={{ ...cellStyle, color: bid ? 'var(--text)' : 'transparent' }}>{fmtQty(qty)}</span>
+      {showBidAsk && <span style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: bid ? 'var(--green)' : 'transparent' }}>{fmtNum(price)}</span>}
+      {showBidAsk && <span style={{ ...cellStyle, textAlign: 'right', fontWeight: 700, color: !bid ? 'var(--red)' : 'transparent' }}>{fmtNum(price)}</span>}
+      <span style={{ ...cellStyle, textAlign: 'right', color: !bid ? 'var(--text)' : 'transparent' }}>{fmtQty(qty)}</span>
     </div>
   );
 }

@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MousePointer2, Crosshair, Slash, Square, TrendingUp, Type, Ruler, Brush,
-  ArrowRight, MoveDiagonal, Minus, ArrowUpDown, AlignCenterVertical, TrendingDown, Scale,
+  ArrowRight, MoveDiagonal, Minus, ArrowUpDown, AlignCenterVertical, TrendingDown, Scale, Circle,
+  Percent, Magnet, Trash2,
 } from 'lucide-react';
 
 // Colors flow through the app's CSS variables (globals.css) so the rail
@@ -27,9 +28,10 @@ const GROUPS = [
   ] },
   { id: 'shapes', label: 'Shapes', icon: Square, tools: [
     ['rect', Square, 'Rectangle'],
+    ['circle', Circle, 'Circle'],
     ['parallelChannel', AlignCenterVertical, 'Channel'],
   ] },
-  { id: 'fib', label: 'Fibonacci', icon: TrendingUp, tools: [['fib', TrendingUp, 'Fib']] },
+  { id: 'fib', label: 'Fibonacci', icon: Percent, tools: [['fib', Percent, 'Fib']] },
   { id: 'textarrow', label: 'Text / Arrow', icon: Type, tools: [
     ['text', Type, 'Text'],
     ['arrow', ArrowRight, 'Arrow'],
@@ -43,7 +45,7 @@ const GROUPS = [
   { id: 'brush', label: 'Brush', icon: Brush, tools: [['brush', Brush, 'Brush']] },
 ];
 
-export default function TVLeftToolbar({ tool, setTool }) {
+export default function TVLeftToolbar({ tool, setTool, magnet, onToggleMagnet, onClearAll }) {
   const [openGroup, setOpenGroup] = useState(null);
   const [flyoutPos, setFlyoutPos] = useState({ left: 0, top: 0 });
   const barRef = useRef(null);
@@ -84,9 +86,9 @@ export default function TVLeftToolbar({ tool, setTool }) {
         alignItems: 'center',
         gap: 2,
         padding: '8px 4px',
-        width: 44,
+        width: 40,
+        height: '100%',
         flexShrink: 0,
-        alignSelf: 'flex-start',
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 8,
@@ -102,8 +104,8 @@ export default function TVLeftToolbar({ tool, setTool }) {
                 title={group.label}
                 onClick={(e) => handleGroupClick(group, e.currentTarget)}
                 style={{
-                  width: 36,
-                  height: 36,
+                  width: 32,
+                  height: 32,
                   borderRadius: 4,
                   display: 'grid',
                   placeItems: 'center',
@@ -117,7 +119,7 @@ export default function TVLeftToolbar({ tool, setTool }) {
                 onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = HOVER_BG; }}
                 onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
               >
-                <Icon size={18} strokeWidth={1.8} />
+                <Icon size={16} strokeWidth={1.8} />
                 {hasChildren && (
                   <span style={{
                     position: 'absolute',
@@ -134,6 +136,41 @@ export default function TVLeftToolbar({ tool, setTool }) {
             </div>
           );
         })}
+
+        {/* Bottom-anchored utility cluster (Phase 21C, Section 6) — mirrors
+            the reference's lock/visibility/trash grouping at the foot of the
+            rail, rather than burying these in the header. Magnet/clear are
+            NOT duplicated in the header anymore (moved here). */}
+        <span style={{ flex: 1 }} />
+        <div style={{ width: 24, height: 1, background: 'var(--line2)', margin: '4px 0' }} />
+        <button
+          title="Snap to OHLC"
+          aria-pressed={magnet}
+          onClick={onToggleMagnet}
+          style={{
+            width: 32, height: 32, borderRadius: 4, display: 'grid', placeItems: 'center',
+            background: magnet ? ACTIVE_BG : 'transparent',
+            color: magnet ? ACTIVE_COLOR : 'var(--muted)',
+            border: 'none', cursor: 'pointer', transition: 'background 0.1s',
+          }}
+          onMouseEnter={(e) => { if (!magnet) e.currentTarget.style.background = HOVER_BG; }}
+          onMouseLeave={(e) => { if (!magnet) e.currentTarget.style.background = 'transparent'; }}
+        >
+          <Magnet size={16} strokeWidth={1.8} />
+        </button>
+        <button
+          title="Clear all drawings"
+          onClick={onClearAll}
+          style={{
+            width: 32, height: 32, borderRadius: 4, display: 'grid', placeItems: 'center',
+            background: 'transparent', color: 'var(--muted)',
+            border: 'none', cursor: 'pointer', transition: 'background 0.1s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = HOVER_BG; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <Trash2 size={16} strokeWidth={1.8} />
+        </button>
       </div>
 
       {openGroup && (() => {

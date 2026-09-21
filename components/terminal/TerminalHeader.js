@@ -445,15 +445,16 @@ export default function TerminalHeader({
 
       {/* Right cluster — Broker Status | Latency | Connection | Fullscreen | Settings | Profile */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        {/* Broker Status */}
-        <span title="Broker status" style={{
+        {/* Market-data feed status (relay). NOT a broker connection — the
+            terminal has no broker integration; order flow is simulated. */}
+        <span title="Market-data feed (delayed/indicative)" style={{
           fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
           padding: '3px 6px', borderRadius: 4,
           background: status === 'connected' ? T.colors.upBg : T.colors.downBg,
           color: status === 'connected' ? T.colors.up : T.colors.down,
           fontFamily: T.font.family,
         }}>
-          {status === 'connected' ? 'LIVE' : 'OFFLINE'}
+          {status === 'connected' ? 'DATA LIVE' : 'OFFLINE'}
         </span>
 
         {/* Latency */}

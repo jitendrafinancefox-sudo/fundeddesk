@@ -3,15 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 
 const TOTAL_FRAMES = 258;
-const FRAME_STEP = 2; // Use every 2nd frame to reduce load (129 frames)
+const FRAME_STEP = 2;
 const FRAMES = Array.from({ length: Math.ceil(TOTAL_FRAMES / FRAME_STEP) }, (_, i) =>
   `/sequence/ezgif-frame-${String((i * FRAME_STEP) + 1).padStart(3, '0')}.jpg`
 );
 
-export default function HeroSequence() {
+export default function HeroSequence({ progress }) {
   const canvasRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
-  const [frameIdx, setFrameIdx] = useState(0);
   const imagesRef = useRef([]);
   const rafRef = useRef(0);
   const currentFrameRef = useRef(-1);
@@ -43,35 +42,15 @@ export default function HeroSequence() {
     return () => { cancelled = true; };
   }, []);
 
-  // Scroll handler - compute frame from scroll position
+  // Update frame index from progress prop (0-1)
   useEffect(() => {
-    const hero = document.querySelector('header.hero');
-    if (!hero) return;
-
-    function onScroll() {
-      const rect = hero.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const heroHeight = rect.height;
-
-      // Progress 0-1 as hero exits viewport (top hits -heroHeight, bottom hits 0)
-      const start = -heroHeight;
-      const end = 0;
-      const progress = (rect.top - end) / (start - end);
-      const clamped = Math.max(0, Math.min(1, progress));
-
-      const targetFrame = Math.floor(clamped * (FRAMES.length - 1));
-      if (targetFrame !== currentFrameRef.current) {
-        currentFrameRef.current = targetFrame;
-        setFrameIdx(targetFrame);
-      }
+    const targetFrame = Math.floor(progress * (FRAMES.length - 1));
+    if (targetFrame !== currentFrameRef.current) {
+      currentFrameRef.current = targetFrame;
     }
+  }, [progress]);
 
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  // Draw loop - only redraws when frameIdx changes
+  // Draw loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !loaded) return;
@@ -91,6 +70,7 @@ export default function HeroSequence() {
     window.addEventListener('resize', resize);
 
     function draw() {
+      const frameIdx = currentFrameRef.current;
       const img = imagesRef.current[frameIdx];
       if (!img) {
         rafRef.current = requestAnimationFrame(draw);
@@ -130,7 +110,7 @@ export default function HeroSequence() {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener('resize', resize);
     };
-  }, [loaded, frameIdx]);
+  }, [loaded]);
 
   return (
     <div style={{
@@ -138,7 +118,7 @@ export default function HeroSequence() {
       inset: 0,
       overflow: 'hidden',
       zIndex: 0,
-      background: 'radial-gradient(720px 400px at 50% -8%, rgba(34,197,139,.20), transparent 65%), radial-gradient(520px 300px at 82% 22%, rgba(124,242,156,.08), transparent 60%)',
+      background: '#040806', // Dark fallback matching sequence
     }}>
       <canvas
         ref={canvasRef}
@@ -156,9 +136,16 @@ export default function HeroSequence() {
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'radial-gradient(720px 400px at 50% -8%, rgba(34,197,139,.20), transparent 65%), radial-gradient(520px 300px at 82% 22%, rgba(124,242,156,.08), transparent 60%)',
+          background: '#040806',
         }} />
       )}
+      {/* Dark overlay for text contrast - subtle, lets sequence show through */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'linear-gradient(180deg, rgba(4,8,6,0.3) 0%, rgba(4,8,6,0.55) 50%, rgba(4,8,6,0.75) 100%)',
+        zIndex: 1,
+      }} />
     </div>
   );
 }

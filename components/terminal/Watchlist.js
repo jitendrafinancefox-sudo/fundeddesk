@@ -2,8 +2,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, Star, ChevronRight } from 'lucide-react';
 import { allStockSymbols } from '@/services/marketData';
-import { INDEX_TOKEN } from './constants';
+import { INDEX_TOKEN, IS_MARKET_OPEN } from './constants';
+import { usePrice } from '@/stores/PriceBus';
 import { T } from './theme';
+
+// Dark-themed token set for the tv-chart terminal (FundedDesk near-black
+// brand), parallel to theme.js's light T.colors — Watchlist only renders
+// inside the dark terminal shell now (TradingTerminal.js is unreachable).
+const D = {
+  text: 'var(--text)',
+  muted: 'var(--muted)',
+  dim: 'var(--dim)',
+  border: 'var(--border)',
+  bg: 'var(--surface)',
+  bgAlt: 'var(--bg2)',
+  bgHover: 'var(--bg2)',
+  up: 'var(--green)',
+  down: 'var(--red)',
+  amber: 'var(--gold)',
+  blueBg: 'rgba(77,124,254,.14)',
+  upBg: 'rgba(34,197,139,0.12)',
+  downBg: 'rgba(240,82,95,0.12)',
+};
 
 const HARDCODED_UNIVERSE = [
   { token: INDEX_TOKEN.NIFTY, exchange: 'NSE', symbol_label: 'NIFTY 50', symbol: 'NIFTY', kind: 'index' },
@@ -28,12 +48,65 @@ const th = (label, align = 'left') => ({
   padding: align === 'left' ? '6px 8px' : '6px 4px',
   fontWeight: 600,
   fontSize: 10,
-  color: T.colors.muted,
-  borderBottom: `1px solid ${T.colors.border}`,
+  color: D.muted,
+  borderBottom: `1px solid ${D.border}`,
   whiteSpace: 'nowrap',
 });
 
-export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd, onRemove, optionChainRows, activeToken, onClose, onOpenNewPane, onDuplicateChart }) {
+// Selected-instrument detail card (Phase 21B, Section 6) — shown below the
+// watchlist table, inspired by the reference's per-selection summary. Reads
+// live price the SAME way InstrumentCard.js does (usePrice() against the
+// shared PriceBus store — not a new subscription) and derives change/day-open
+// from the active panel's own already-loaded candles (getCandles, passed in
+// by TVTerminal), the same "first loaded candle's open" proxy InstrumentCard
+// already uses for prevClose. Anything not derivable this way (volume,
+// bid/ask, day high/low, an independent market-status feed) is left out
+// entirely rather than fabricated — market status uses the same real
+// IS_MARKET_OPEN() check StatusBar/InstrumentCard already rely on.
+function SelectedDetailCard({ instrument, getCandles }) {
+  const quote = usePrice(instrument?.token);
+  if (!instrument) return null;
+  const candles = getCandles ? getCandles() : [];
+  const last = candles.length ? candles[candles.length - 1] : null;
+  const first = candles.length ? candles[0] : null;
+  const lastPrice = quote?.ltp ?? last?.close ?? null;
+  const prevClose = first?.open ?? null;
+  const change = lastPrice != null && prevClose != null ? lastPrice - prevClose : null;
+  const changePct = change != null && prevClose ? (change / prevClose) * 100 : null;
+  const tone = change == null || change === 0 ? D.muted : change > 0 ? D.up : D.down;
+  const fmt = (v) => (v == null ? '—' : Number(v).toFixed(2));
+
+  return (
+    <div style={{ borderTop: `1px solid ${D.border}`, padding: '10px 12px', flexShrink: 0, fontFamily: T.font.family }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{
+          width: 26, height: 26, borderRadius: '50%', background: D.bgAlt,
+          display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, color: D.text, flexShrink: 0,
+        }}>
+          {(instrument.symbol || '?').slice(0, 1)}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: D.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {instrument.symbol}
+          </div>
+          <div style={{ fontSize: 10, color: D.muted }}>
+            {instrument.exchange} · {instrument.chartMode === 'strike' ? 'OPTION' : instrument.chartMode === 'index' ? 'INDEX' : 'FUTURE'}
+          </div>
+        </div>
+      </div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: D.text, fontVariantNumeric: 'tabular-nums' }}>{fmt(lastPrice)}</div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: tone, marginBottom: 6 }}>
+        {change != null ? `${change > 0 ? '+' : ''}${change.toFixed(2)}` : '—'}
+        {changePct != null ? ` (${changePct > 0 ? '+' : ''}${changePct.toFixed(2)}%)` : ''}
+      </div>
+      <div style={{ fontSize: 10.5, color: D.muted }}>
+        {IS_MARKET_OPEN() ? 'Market open' : 'Market closed'}
+      </div>
+    </div>
+  );
+}
+
+export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd, onRemove, optionChainRows, activeToken, activeInstrument, getActiveCandles, onClose, onOpenNewPane, onDuplicateChart }) {
   const [query, setQuery] = useState('');
   const [universe, setUniverse] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -112,13 +185,26 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
     return () => clearTimeout(t);
   }, [displayed]);
 
+  // Word-prefix, multi-token matching: the query is split into tokens, and a
+  // candidate matches only if EVERY query token is a prefix of some whole
+  // word in the candidate (symbol/label/underlying/strike/CE-PE), never a
+  // bare substring of the full string. This is what stops "NIFTY" from
+  // matching inside "BANKNIFTY" (no candidate word starts with "NIFTY"
+  // there) while still letting combined queries like "BANKNIFTY 55700" or
+  // "55700 CE" work, since each token just needs to prefix-match a
+  // different word.
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
+    const qTokens = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
+    if (!qTokens.length) return [];
+    const wordsOf = (s) => String(s || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+    const matches = (words) => qTokens.every((qt) => words.some((w) => w.startsWith(qt)));
+
     const results = [];
     const seen = new Set();
     universe.forEach((u) => {
-      if (seen.has(u.token + 'univ') || !(u.symbol?.toLowerCase().includes(q) || u.symbol_label?.toLowerCase().includes(q))) return;
+      if (seen.has(u.token + 'univ')) return;
+      const words = [...wordsOf(u.symbol), ...wordsOf(u.symbol_label)];
+      if (!matches(words)) return;
       seen.add(u.token + 'univ');
       results.push({ ...u, source: 'universe' });
     });
@@ -126,11 +212,15 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
       optionChainRows.forEach((row) => {
         const underlying = row.underlying || '';
         const strikeStr = String(row.strike || '');
-        const matchUnd = underlying.toLowerCase().includes(q);
-        const matchStrike = strikeStr.toLowerCase().includes(q);
-        if (!matchUnd && !matchStrike) return;
-        if (row.ceToken && !seen.has(row.ceToken)) { seen.add(row.ceToken); results.push({ token: row.ceToken, exchange: 'NFO', symbol_label: `${underlying} ${row.strike} CE`, symbol: `${underlying} ${row.strike} CE`, kind: 'option', source: 'option', ce: true }); }
-        if (row.peToken && !seen.has(row.peToken)) { seen.add(row.peToken); results.push({ token: row.peToken, exchange: 'NFO', symbol_label: `${underlying} ${row.strike} PE`, symbol: `${underlying} ${row.strike} PE`, kind: 'option', source: 'option', ce: false }); }
+        const baseWords = [...wordsOf(underlying), ...wordsOf(strikeStr)];
+        if (row.ceToken && !seen.has(row.ceToken) && matches([...baseWords, 'CE'])) {
+          seen.add(row.ceToken);
+          results.push({ token: row.ceToken, exchange: 'NFO', symbol_label: `${underlying} ${row.strike} CE`, symbol: `${underlying} ${row.strike} CE`, kind: 'option', source: 'option', ce: true });
+        }
+        if (row.peToken && !seen.has(row.peToken) && matches([...baseWords, 'PE'])) {
+          seen.add(row.peToken);
+          results.push({ token: row.peToken, exchange: 'NFO', symbol_label: `${underlying} ${row.strike} PE`, symbol: `${underlying} ${row.strike} PE`, kind: 'option', source: 'option', ce: false });
+        }
       });
     }
     return results;
@@ -165,7 +255,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
   };
 
   const cellFlash = (token) => ({
-    background: flash[token] === 'up' ? T.colors.upBg : flash[token] === 'down' ? T.colors.downBg : 'transparent',
+    background: flash[token] === 'up' ? D.upBg : flash[token] === 'down' ? D.downBg : 'transparent',
     transition: 'background 0.35s ease-out',
   });
 
@@ -175,13 +265,13 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      background: T.colors.bg,
+      background: D.bg,
       overflow: 'hidden',
     }}>
       {/* Header */}
       <div style={{
         padding: '8px 12px',
-        borderBottom: `1px solid ${T.colors.border}`,
+        borderBottom: `1px solid ${D.border}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -191,7 +281,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
           fontSize: 12,
           fontWeight: 700,
           fontFamily: T.font.family,
-          color: T.colors.text,
+          color: D.text,
           letterSpacing: '-0.01em',
         }}>
           Watchlist
@@ -199,7 +289,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{
             fontSize: 10,
-            color: T.colors.dim,
+            color: D.dim,
             fontFamily: T.font.family,
             fontVariantNumeric: 'tabular-nums',
           }}>
@@ -212,10 +302,10 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
               width: 22, height: 22, borderRadius: T.radius.md, flexShrink: 0,
               display: 'grid', placeItems: 'center',
               background: 'transparent', border: 'none',
-              color: T.colors.muted, cursor: 'pointer',
+              color: D.muted, cursor: 'pointer',
               transition: `background ${T.motion.fast}`,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = T.colors.bgHover; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = D.bgHover; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
             <ChevronRight size={13} style={{ transform: 'rotate(180deg)' }} />
@@ -226,7 +316,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
       {/* Search */}
       <div style={{
         padding: '6px 12px',
-        borderBottom: `1px solid ${T.colors.border}`,
+        borderBottom: `1px solid ${D.border}`,
         position: 'relative',
         flexShrink: 0,
       }}>
@@ -235,11 +325,11 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
           alignItems: 'center',
           gap: 6,
           padding: '5px 8px',
-          background: T.colors.bgAlt,
+          background: D.bgAlt,
           borderRadius: T.radius.md,
-          border: `1px solid ${T.colors.border}`,
+          border: `1px solid ${D.border}`,
         }}>
-          <Search size={13} color={T.colors.muted} />
+          <Search size={13} color={D.muted} />
           <input
             value={query}
             onChange={(e) => { setQuery(e.target.value); setShowDropdown(Boolean(e.target.value.trim())); }}
@@ -250,10 +340,9 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
               flex: 1,
               border: 'none',
               background: 'transparent',
-              color: T.colors.text,
+              color: D.text,
               fontSize: 11,
               fontFamily: T.font.family,
-              outline: 'none',
               padding: 0,
             }}
           />
@@ -263,7 +352,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: T.colors.muted,
+                color: D.muted,
                 cursor: 'pointer',
                 padding: 0,
                 display: 'grid',
@@ -285,15 +374,15 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
             maxHeight: 240,
             overflowY: 'auto',
             overflowX: 'hidden',
-            background: T.colors.bg,
-            border: `1px solid ${T.colors.border}`,
+            background: D.bg,
+            border: `1px solid ${D.border}`,
             borderRadius: T.radius.lg,
             boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
             zIndex: 100,
             padding: '4px 0',
           }}>
             {filtered.length === 0 && query.trim() && (
-              <div style={{ padding: 12, fontSize: 12, color: T.colors.muted, textAlign: 'center' }}>No results</div>
+              <div style={{ padding: 12, fontSize: 12, color: D.muted, textAlign: 'center' }}>No results</div>
             )}
             {filtered.slice(0, 12).map((result) => (
               <button
@@ -305,7 +394,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                   textAlign: 'left',
                   border: 'none',
                   background: 'transparent',
-                  color: T.colors.text,
+                  color: D.text,
                   fontSize: 12,
                   cursor: 'pointer',
                   display: 'flex',
@@ -314,19 +403,19 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                   fontFamily: T.font.family,
                   transition: `background ${T.motion.fast}`,
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = T.colors.blueBg; }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = D.blueBg; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                <Star size={12} color={pins.has(result.token) ? T.colors.amber : T.colors.dim} fill={pins.has(result.token) ? T.colors.amber : 'none'} />
+                <Star size={12} color={pins.has(result.token) ? D.amber : D.dim} fill={pins.has(result.token) ? D.amber : 'none'} />
                 <div>
                   <div style={{ fontWeight: 600 }}>{result.symbol_label}</div>
-                  <div style={{ fontSize: 10, color: T.colors.muted }}>{result.exchange} · {result.kind}</div>
+                  <div style={{ fontSize: 10, color: D.muted }}>{result.exchange} · {result.kind}</div>
                 </div>
               </button>
             ))}
             {!query.trim() && recent.length > 0 && (
               <>
-                <div style={{ padding: '6px 12px 2px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: T.colors.dim, fontFamily: T.font.family }}>
+                <div style={{ padding: '6px 12px 2px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: D.dim, fontFamily: T.font.family }}>
                   RECENTLY VIEWED
                 </div>
                 {recent.map((r) => (
@@ -339,7 +428,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                       textAlign: 'left',
                       border: 'none',
                       background: 'transparent',
-                      color: T.colors.text,
+                      color: D.text,
                       fontSize: 12,
                       cursor: 'pointer',
                       display: 'flex',
@@ -348,12 +437,12 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                       fontFamily: T.font.family,
                       transition: `background ${T.motion.fast}`,
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = T.colors.blueBg; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = D.blueBg; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <Star size={12} color={T.colors.dim} />
+                    <Star size={12} color={D.dim} />
                     <span style={{ fontWeight: 500 }}>{r.symbol_label}</span>
-                    <span style={{ fontSize: 10, color: T.colors.dim, marginLeft: 'auto' }}>{r.exchange}</span>
+                    <span style={{ fontSize: 10, color: D.dim, marginLeft: 'auto' }}>{r.exchange}</span>
                   </button>
                 ))}
               </>
@@ -374,7 +463,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
             <tr style={{
               position: 'sticky',
               top: 0,
-              background: T.colors.bgAlt,
+              background: D.bgAlt,
               zIndex: 10,
             }}>
               <th style={th('Symbol')}>Symbol</th>
@@ -413,18 +502,18 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                 style={{
                   cursor: 'pointer',
                   transition: `background ${T.motion.fast}`,
-                  background: item.token === activeToken ? T.colors.blueBg : 'transparent',
-                  boxShadow: item.token === activeToken ? 'inset 2px 0 0 #2962ff' : 'none',
+                  background: item.token === activeToken ? D.blueBg : 'transparent',
+                  boxShadow: item.token === activeToken ? 'inset 2px 0 0 var(--blue)' : 'none',
                 }}
-                onMouseEnter={(e) => { if (item.token !== activeToken) e.currentTarget.style.background = T.colors.bgHover; }}
+                onMouseEnter={(e) => { if (item.token !== activeToken) e.currentTarget.style.background = D.bgHover; }}
                 onMouseLeave={(e) => { if (item.token !== activeToken) e.currentTarget.style.background = 'transparent'; }}
               >
                 <td style={{
                   padding: '6px 8px',
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  borderBottom: `1px solid ${D.border}`,
                   fontWeight: 500,
                   fontSize: 11,
-                  color: T.colors.text,
+                  color: D.text,
                   fontFamily: T.font.family,
                   letterSpacing: '-0.01em',
                   maxWidth: 90,
@@ -440,8 +529,8 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                   fontWeight: 500,
                   fontVariantNumeric: 'tabular-nums',
                   fontSize: 11,
-                  color: item.change != null ? (item.change >= 0 ? T.colors.up : T.colors.down) : T.colors.text,
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  color: item.change != null ? (item.change >= 0 ? D.up : D.down) : D.text,
+                  borderBottom: `1px solid ${D.border}`,
                   ...cellFlash(item.token),
                 }}>
                   {mounted && item.ltp != null ? item.ltp.toFixed(2) : '—'}
@@ -449,10 +538,10 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                 <td style={{
                   padding: '6px 4px',
                   textAlign: 'right',
-                  color: item.change == null ? T.colors.muted : (item.change >= 0 ? T.colors.up : T.colors.down),
+                  color: item.change == null ? D.muted : (item.change >= 0 ? D.up : D.down),
                   fontVariantNumeric: 'tabular-nums',
                   fontSize: 11,
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  borderBottom: `1px solid ${D.border}`,
                   ...cellFlash(item.token),
                 }}>
                   {mounted && item.change != null ? (item.change >= 0 ? '+' : '') + item.change.toFixed(2) + '%' : '—'}
@@ -460,47 +549,47 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                 <td style={{
                   padding: '6px 4px',
                   textAlign: 'right',
-                  color: T.colors.muted,
+                  color: D.muted,
                   fontVariantNumeric: 'tabular-nums',
                   fontSize: 11,
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  borderBottom: `1px solid ${D.border}`,
                 }}>
                   {mounted ? fmtQty(item.volume) : '—'}
                 </td>
                 <td style={{
                   padding: '6px 4px',
                   textAlign: 'right',
-                  color: T.colors.muted,
+                  color: D.muted,
                   fontVariantNumeric: 'tabular-nums',
                   fontSize: 11,
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  borderBottom: `1px solid ${D.border}`,
                 }}>
                   {mounted ? fmtQty(item.oi) : '—'}
                 </td>
                 <td style={{
                   padding: '6px 4px',
                   textAlign: 'right',
-                  color: T.colors.muted,
+                  color: D.muted,
                   fontVariantNumeric: 'tabular-nums',
                   fontSize: 11,
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  borderBottom: `1px solid ${D.border}`,
                 }}>
                   {mounted ? (item.bid?.toFixed(2) ?? '—') : '—'}
                 </td>
                 <td style={{
                   padding: '6px 4px',
                   textAlign: 'right',
-                  color: T.colors.muted,
+                  color: D.muted,
                   fontVariantNumeric: 'tabular-nums',
                   fontSize: 11,
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  borderBottom: `1px solid ${D.border}`,
                 }}>
                   {mounted ? (item.ask?.toFixed(2) ?? '—') : '—'}
                 </td>
                 <td style={{
                   padding: '6px 4px',
                   textAlign: 'center',
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  borderBottom: `1px solid ${D.border}`,
                 }}>
                   <button
                     onClick={(e) => togglePin(item.token, e)}
@@ -512,19 +601,19 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                       display: 'grid',
                       placeItems: 'center',
                       cursor: 'pointer',
-                      color: pins.has(item.token) ? T.colors.amber : T.colors.dim,
+                      color: pins.has(item.token) ? D.amber : D.dim,
                       transition: `color ${T.motion.fast}, transform ${T.motion.fast}`,
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = T.colors.amber; e.currentTarget.style.transform = 'scale(1.15)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = pins.has(item.token) ? T.colors.amber : T.colors.dim; e.currentTarget.style.transform = 'scale(1)'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = D.amber; e.currentTarget.style.transform = 'scale(1.15)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = pins.has(item.token) ? D.amber : D.dim; e.currentTarget.style.transform = 'scale(1)'; }}
                   >
-                    <Star size={12} fill={pins.has(item.token) ? T.colors.amber : 'none'} />
+                    <Star size={12} fill={pins.has(item.token) ? D.amber : 'none'} />
                   </button>
                 </td>
                 <td style={{
                   padding: '6px 6px',
                   textAlign: 'right',
-                  borderBottom: `1px solid ${T.colors.border}`,
+                  borderBottom: `1px solid ${D.border}`,
                 }}>
                   {!item.position && (
                     <button
@@ -536,15 +625,15 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                         borderRadius: T.radius.md,
                         border: 'none',
                         background: 'transparent',
-                        color: T.colors.muted,
+                        color: D.muted,
                         cursor: 'pointer',
                         fontSize: 12,
                         display: 'grid',
                         placeItems: 'center',
                         transition: `background ${T.motion.fast}, color ${T.motion.fast}`,
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = T.colors.downBg; e.currentTarget.style.color = T.colors.down; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.colors.muted; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = D.downBg; e.currentTarget.style.color = D.down; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = D.muted; }}
                     >
                       ×
                     </button>
@@ -559,7 +648,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
                   style={{
                     padding: 24,
                     textAlign: 'center',
-                    color: T.colors.muted,
+                    color: D.muted,
                     fontSize: 12,
                   }}
                 >
@@ -570,6 +659,7 @@ export default function Watchlist({ items, prices, stockQuotes, onSelect, onAdd,
           </tbody>
         </table>
       </div>
+      <SelectedDetailCard instrument={activeInstrument} getCandles={getActiveCandles} />
     </div>
   );
 }

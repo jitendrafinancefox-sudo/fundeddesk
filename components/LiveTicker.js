@@ -9,12 +9,35 @@ const TICKER_SYMBOLS = [
   'SBIN', 'BHARTIARTL', 'ITC', 'LT', 'AXISBANK', 'KOTAKBANK'
 ];
 
-function normalizeSymbol(s) {
-  return s.replace(/\s+/g, '').toUpperCase();
-}
-
 export default function LiveTicker() {
-  const [items, setItems] = useState([]);
+  // Helper functions defined inside component to avoid module-level conflicts
+  function normalizeSymbol(s) {
+    return s.replace(/\s+/g, '').toUpperCase();
+  }
+
+  function formatPrice(price) {
+    if (price === null || price === undefined) return '—';
+    return price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function formatChange(change) {
+    if (change === null || change === undefined) return '—';
+    const sign = change >= 0 ? '+' : '';
+    return `${sign}${change.toFixed(2)}%`;
+  }
+
+  function changeColor(change) {
+    if (change === null || change === undefined) return 'var(--muted)';
+    return change >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+
+  const TICKER_SYMBOLS = [
+    'NIFTY 50', 'BANKNIFTY',
+    'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK',
+    'SBIN', 'BHARTIARTL', 'ITC', 'LT', 'AXISBANK', 'KOTAKBANK'
+  ];
+
+  const [tickerItems, setTickerItems] = useState([]);
   const [error, setError] = useState(null);
   const mountedRef = useRef(true);
 
@@ -39,16 +62,21 @@ export default function LiveTicker() {
             symbol: row.symbol,
             ltp: row.ltp,
             change: row.dayChangePercent,
-          }));
+          }))
 
         if (filtered.length > 0) {
-          setItems(filtered);
+          setTickerItems(filtered);
           setError(null);
+        } else {
+          // Relay reachable but returned no usable rows - truthfully reflect "no data".
+          setTickerItems([]);
+          setError('No live price data available.');
         }
       } catch (e) {
         if (e?.name !== 'AbortError' && mountedRef.current) {
-          console.warn('LiveTicker fetch failed', e);
-          setError(e?.message || 'Failed to load');
+          console.warn('LiveTicker: market data relay unavailable', e?.message);
+          setTickerItems([]);
+          setError('Live prices unavailable.');
         }
       }
     }
@@ -63,20 +91,8 @@ export default function LiveTicker() {
     };
   }, []);
 
-  if (!items.length && error) {
-    return (
-      <div style={{
-        height: 36,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(240,82,95,.08)', borderBottom: '1px solid rgba(240,82,95,.2)',
-        color: 'var(--red)', fontSize: 13, fontFamily: 'Manrope,sans-serif'
-      }}>
-        Unable to load live prices
-      </div>
-    );
-  }
-
-  if (!items.length) {
+  // No items yet: distinguish a truthful "unavailable" state from the initial load.
+  if (!tickerItems.length) {
     return (
       <div style={{
         height: 36,
@@ -84,7 +100,7 @@ export default function LiveTicker() {
         background: 'rgba(34,197,139,.05)', borderBottom: '1px solid rgba(34,197,139,.15)',
         color: 'var(--muted)', fontSize: 13, fontFamily: 'Manrope,sans-serif'
       }}>
-        Loading live prices…
+        {error || 'Loading live prices…'}
       </div>
     );
   }
@@ -101,22 +117,6 @@ export default function LiveTicker() {
     fontVariantNumeric: 'tabular-nums',
   };
 
-  const changeColor = (change) => {
-    if (change === null || change === undefined) return 'var(--muted)';
-    return change >= 0 ? 'var(--green)' : 'var(--red)';
-  };
-
-  const formatPrice = (price) => {
-    if (price === null || price === undefined) return '—';
-    return price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
-  const formatChange = (change) => {
-    if (change === null || change === undefined) return '—';
-    const sign = change >= 0 ? '+' : '';
-    return `${sign}${change.toFixed(2)}%`;
-  };
-
   return (
     <div style={{
       width: '100%',
@@ -129,14 +129,14 @@ export default function LiveTicker() {
         animation: 'tickerScroll 30s linear infinite',
         willChange: 'transform',
       }}>
-        {items.map((item, i) => (
+        {tickerItems.map((item, i) => (
           <span key={item.symbol} style={itemStyle}>
             <span style={{ color: 'var(--text)', fontWeight: 500 }}>{item.symbol}</span>
             <span style={{ color: 'var(--text)' }}>₹{formatPrice(item.ltp)}</span>
             <span style={{ color: changeColor(item.change) }}>
               {formatChange(item.change)}
             </span>
-            {i < items.length - 1 && (
+            {i < tickerItems.length - 1 && (
               <span style={{
                 width: 6, height: 6, borderRadius: '50%',
                 background: 'var(--line)', margin: '0 10px'
@@ -144,14 +144,14 @@ export default function LiveTicker() {
             )}
           </span>
         ))}
-        {items.map((item, i) => (
+        {tickerItems.map((item, i) => (
           <span key={`${item.symbol}-clone`} style={itemStyle}>
             <span style={{ color: 'var(--text)', fontWeight: 500 }}>{item.symbol}</span>
             <span style={{ color: 'var(--text)' }}>₹{formatPrice(item.ltp)}</span>
             <span style={{ color: changeColor(item.change) }}>
               {formatChange(item.change)}
             </span>
-            {i < items.length - 1 && (
+            {i < tickerItems.length - 1 && (
               <span style={{
                 width: 6, height: 6, borderRadius: '50%',
                 background: 'var(--line)', margin: '0 10px'
@@ -169,4 +169,25 @@ export default function LiveTicker() {
       `}</style>
     </div>
   );
+
+  // Helper functions defined inside component to avoid module-level conflicts
+  function normalizeSymbol(s) {
+    return s.replace(/\s+/g, '').toUpperCase();
+  }
+
+  function formatPrice(price) {
+    if (price === null || price === undefined) return '—';
+    return price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function formatChange(change) {
+    if (change === null || change === undefined) return '—';
+    const sign = change >= 0 ? '+' : '';
+    return `${sign}${change.toFixed(2)}%`;
+  }
+
+  function changeColor(change) {
+    if (change === null || change === undefined) return 'var(--muted)';
+    return change >= 0 ? 'var(--green)' : 'var(--red)';
+  }
 }

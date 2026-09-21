@@ -1,0 +1,131 @@
+/* ============================================================
+   /faq — scoped styles (CSS Module: hashed at build time, nothing
+   here can leak into other routes).
+   Uses only design tokens already defined in app/globals.css.
+   Typography/container scale matches /rules (the shared public
+   knowledge-base reference) — see app/rules/rules.module.css.
+   ============================================================ */
+
+.page { scroll-behavior: smooth; }
+
+.page :global(.wrap) { max-width: 1320px; padding: 0 44px; }
+@media (max-width: 1024px) { .page :global(.wrap) { padding: 0 28px; } }
+@media (max-width: 640px) { .page :global(.wrap) { padding: 0 18px; } }
+
+/* ---------- Hero ---------- */
+.hero { position: relative; overflow: hidden; padding: 116px 0 56px; isolation: isolate; }
+.heroGlow {
+  position: absolute; inset: -30% -10% auto -10%; height: 680px; pointer-events: none; z-index: -1;
+  background:
+    radial-gradient(600px 340px at 22% 15%, rgba(34, 197, 139, 0.18), transparent 70%),
+    radial-gradient(500px 320px at 80% 5%, rgba(22, 199, 132, 0.11), transparent 70%);
+  filter: blur(10px);
+  animation: heroDrift 24s ease-in-out infinite alternate;
+}
+@keyframes heroDrift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(1.5%, 2%, 0) scale(1.05); } }
+@media (prefers-reduced-motion: reduce) { .heroGlow { animation: none; } }
+.heroVignette { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse 85% 65% at 50% 0%, transparent 38%, var(--bg) 100%); }
+.heroInner { max-width: 780px; margin: 0 auto; text-align: center; }
+.eyebrow {
+  font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--brand); display: inline-flex; align-items: center; gap: 10px; margin-bottom: 24px;
+  padding: 8px 18px 8px 14px; border: 1px solid var(--border-glow); border-radius: 999px; background: rgba(34, 197, 139, 0.06);
+}
+.eyebrow::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--grad); box-shadow: 0 0 10px var(--brand-glow); }
+.heroTitle { font-family: 'Unbounded', 'Manrope', sans-serif; font-size: clamp(40px, 5.6vw, 64px); font-weight: 700; line-height: 1.08; letter-spacing: -0.02em; margin: 0 0 24px; }
+.heroSub { font-family: 'Inter', system-ui, sans-serif; font-size: clamp(16.5px, 1.9vw, 19.5px); line-height: 1.65; color: var(--muted); max-width: 620px; margin: 0 auto 42px; }
+
+/* Search — same proportions as the /rules hero search (the shared pattern
+   for this knowledge base): a real primary control, not a small form field. */
+.searchWrap { position: relative; max-width: 640px; margin: 0 auto; text-align: left; }
+.searchBox {
+  display: flex; align-items: center; gap: 14px; min-height: 64px;
+  background: rgba(10, 20, 14, 0.72);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15); backdrop-filter: blur(16px) saturate(1.15);
+  border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+  padding: 14px 24px;
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color var(--normal) var(--ease), box-shadow var(--normal) var(--ease);
+}
+.searchBox:focus-within { border-color: var(--border-glow); box-shadow: var(--shadow-lg), var(--shadow-glow-strong), inset 0 1px 0 rgba(255, 255, 255, 0.04); }
+.searchIconWrap { flex-shrink: 0; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--grad-subtle); color: var(--brand); }
+.searchInput { flex: 1; background: none; border: none; outline: none; color: var(--text); font-size: 17px; font-family: 'Inter', system-ui, sans-serif; min-width: 0; }
+.searchInput::placeholder { color: var(--dim); }
+.searchClear { display: inline-flex; align-items: center; gap: 5px; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 6px 8px; flex-shrink: 0; }
+.searchClear:hover { color: var(--text); }
+
+/* ---------- Workspace ---------- */
+.workspace { padding: 8px 0 88px; position: relative; }
+.categoryRow { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 40px; }
+.categoryBtn {
+  min-height: 44px;
+  padding: 11px 22px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--muted); font-size: 14.5px; font-weight: 700; cursor: pointer;
+  transition: background var(--normal) var(--ease), border-color var(--normal) var(--ease), color var(--normal) var(--ease);
+}
+.categoryBtn:hover { color: var(--text); border-color: var(--border-strong); }
+.categoryBtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.categoryBtnActive { background: var(--grad); color: #04140c; border-color: transparent; box-shadow: var(--shadow-glow); }
+
+.list { display: flex; flex-direction: column; gap: 14px; max-width: 860px; margin: 0 auto; }
+
+/* ---------- Accordion — same scale/feel as the /rules rule accordion ---------- */
+.item {
+  border: 1px solid var(--border); border-radius: var(--r); background: rgba(255, 255, 255, 0.015);
+  overflow: hidden;
+  transition: border-color var(--normal) var(--ease), box-shadow var(--normal) var(--ease);
+}
+.item:hover { border-color: var(--border-strong); }
+.itemOpen { border-color: var(--border-glow); box-shadow: inset 3px 0 0 var(--brand); }
+.itemHeader {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  min-height: 66px; background: none; border: none; cursor: pointer;
+  padding: 20px 26px; text-align: left; color: var(--text);
+}
+.itemHeader:hover .itemQuestion { color: var(--brand-bright); }
+.itemHeader:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.itemHeaderLeft { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.itemIcon {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: rgba(255, 255, 255, 0.05); color: var(--muted);
+  transition: transform var(--normal) var(--ease), background var(--normal) var(--ease), color var(--normal) var(--ease);
+}
+.itemIconOpen { transform: rotate(45deg); background: var(--grad-subtle); color: var(--brand); }
+.itemQuestion { font-size: 17.5px; font-weight: 600; line-height: 1.4; transition: color var(--normal) var(--ease); }
+.itemCategoryTag {
+  flex-shrink: 0; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
+  border: 1px solid var(--border-strong); border-radius: 999px; padding: 3px 10px; background: rgba(255, 255, 255, 0.015);
+}
+.itemPanel { overflow: hidden; max-height: 0; opacity: 0; transition: max-height var(--slow) var(--ease), opacity var(--normal) var(--ease); }
+.itemPanelOpen { max-height: 420px; opacity: 1; }
+.itemAnswer { font-size: 16.5px; color: var(--muted); line-height: 1.7; padding: 0 26px 24px 68px; margin: 0; }
+.itemRelated {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0 26px 22px 68px;
+  font-size: 14px; font-weight: 700; color: var(--brand); text-decoration: none;
+}
+.itemRelated:hover { color: var(--brand-bright); }
+@media (prefers-reduced-motion: reduce) { .itemPanel, .itemIcon { transition: none; } }
+
+.empty { text-align: center; padding: 56px 28px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-card); max-width: 560px; margin: 0 auto; }
+.emptyTitle { font-size: 18px; font-weight: 700; margin: 0 0 10px; }
+.emptySub { color: var(--muted); font-size: 15px; line-height: 1.6; margin: 0; }
+
+/* ---------- Support CTA ---------- */
+.supportCta {
+  position: relative; margin: 56px auto 0; text-align: center; padding: 56px 28px; max-width: 860px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+  overflow: hidden;
+}
+.supportTitle { position: relative; font-size: clamp(20px, 2.6vw, 28px); font-weight: 700; letter-spacing: -0.01em; margin: 0 0 12px; text-transform: uppercase; font-family: 'Manrope', sans-serif; }
+.supportSub { position: relative; color: var(--muted); font-size: 16px; max-width: 520px; margin: 0 auto 26px; line-height: 1.6; }
+.supportBtns { position: relative; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  .hero { padding: 88px 0 40px; }
+  .searchWrap { max-width: 100%; }
+  .itemHeader { padding: 16px 18px; min-height: 60px; }
+  .itemAnswer { padding: 0 18px 18px 18px; }
+  .itemRelated { margin: 0 18px 18px; }
+  .supportCta { padding: 40px 20px; }
+}

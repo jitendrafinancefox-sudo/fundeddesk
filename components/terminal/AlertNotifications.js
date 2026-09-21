@@ -7,13 +7,13 @@ import { TradingStore, useTradeState } from '@/stores/TradingStore';
 // an alert with the sound channel fires; here we only render the popup
 // channel. Toasts auto-dismiss after 5s.
 const ICONS = {
-  alert: <BellRing size={13} color="#f2994a" />,
-  ok: <CheckCircle2 size={13} color="#26a69a" />,
-  info: <Info size={13} color="#2962ff" />,
-  error: <XCircle size={13} color="#ef5350" />,
+  alert: <BellRing size={13} color="var(--gold)" />,
+  ok: <CheckCircle2 size={13} color="var(--green)" />,
+  info: <Info size={13} color="var(--blue)" />,
+  error: <XCircle size={13} color="var(--red)" />,
 };
 
-const BORDERS = { alert: '#f2994a', ok: '#26a69a', info: '#2962ff', error: '#ef5350' };
+const BORDERS = { alert: 'var(--gold)', ok: 'var(--green)', info: 'var(--blue)', error: 'var(--red)' };
 
 export default function AlertNotifications() {
   const notifications = useTradeState('notifications');
@@ -57,13 +57,13 @@ export default function AlertNotifications() {
           alignItems: 'center',
           gap: 9,
           padding: '9px 12px',
-          background: '#ffffff',
-          border: `1px solid ${BORDERS[n.kind] || '#e0e3eb'}`,
-          borderLeft: `3px solid ${BORDERS[n.kind] || '#e0e3eb'}`,
+          background: 'var(--surface)',
+          border: `1px solid ${BORDERS[n.kind] || 'var(--border)'}`,
+          borderLeft: `3px solid ${BORDERS[n.kind] || 'var(--border)'}`,
           borderRadius: 8,
           boxShadow: '0 6px 22px rgba(30,40,90,0.12)',
           fontSize: 11.5,
-          color: '#222222',
+          color: 'var(--text)',
           animation: 'fdToastIn 0.18s ease-out',
           maxWidth: 340,
         }}>
@@ -71,7 +71,7 @@ export default function AlertNotifications() {
           <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{n.text}</span>
           <button
             onClick={() => TradingStore.dismissNotification(n.id)}
-            style={{ border: 'none', background: 'transparent', color: '#b2b5be', cursor: 'pointer', padding: 2, flexShrink: 0 }}
+            style={{ border: 'none', background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 2, flexShrink: 0 }}
           >
             <X size={12} />
           </button>

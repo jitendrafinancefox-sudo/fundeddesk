@@ -1,0 +1,1060 @@
+/* ============================================================
+   /rules — scoped styles (CSS Module: classes are hashed at build
+   time, so nothing here can leak into other routes).
+   Uses only design tokens already defined in app/globals.css.
+   ============================================================ */
+
+.page { scroll-behavior: smooth; position: relative; }
+.page :global([id]) { scroll-margin-top: 84px; }
+
+/* Rules-scoped content width: wider and more generous than the site-wide
+   .wrap (1200px/24px), matching the "premium documentation" brief. Scoped
+   under .page so it can never affect .wrap on any other route. */
+.page :global(.wrap) { max-width: 1320px; padding: 0 44px; }
+@media (max-width: 1024px) { .page :global(.wrap) { padding: 0 28px; } }
+@media (max-width: 640px) { .page :global(.wrap) { padding: 0 18px; } }
+
+/* ---------- Program design tokens ----------
+   One accent per program, defined once. ONE-STEP reuses the FundedDesk
+   brand green (it IS the base identity); TWO-STEP and INSTANT are
+   restrained secondary accents — never a rainbow UI. `--accent*` is the
+   "currently active program" alias: `.page[data-program]` sets it for the
+   whole page chrome (sidebar, journey, accordions, sticky context bar),
+   while each program-selector card sets it locally from its OWN
+   data-program attribute so all three cards show their real colors
+   simultaneously regardless of which program is active. */
+.page {
+  --one-step-accent: var(--brand);
+  --one-step-bright: var(--brand-bright);
+  --one-step-glow: var(--brand-glow);
+  --one-step-glow-strong: var(--brand-glow-strong);
+  --one-step-subtle: var(--grad-subtle);
+  --one-step-grad: var(--grad);
+
+  --two-step-accent: #4C8DFF;
+  --two-step-bright: #7EB2FF;
+  --two-step-glow: rgba(76, 141, 255, 0.35);
+  --two-step-glow-strong: rgba(76, 141, 255, 0.55);
+  --two-step-subtle: linear-gradient(96deg, rgba(76, 141, 255, 0.14), rgba(47, 111, 224, 0.06));
+  --two-step-grad: linear-gradient(96deg, #4C8DFF, #2F6FE0);
+
+  --instant-accent: var(--gold);
+  --instant-bright: #FFCB66;
+  --instant-glow: rgba(245, 185, 62, 0.35);
+  --instant-glow-strong: rgba(245, 185, 62, 0.55);
+  --instant-subtle: linear-gradient(96deg, rgba(245, 185, 62, 0.14), rgba(217, 148, 32, 0.06));
+  --instant-grad: linear-gradient(96deg, #F5B93E, #D99420);
+}
+.page[data-program="ONE_STEP"] {
+  --accent: var(--one-step-accent); --accent-bright: var(--one-step-bright);
+  --accent-glow: var(--one-step-glow); --accent-glow-strong: var(--one-step-glow-strong);
+  --accent-subtle: var(--one-step-subtle); --accent-grad: var(--one-step-grad);
+}
+.page[data-program="TWO_STEP"] {
+  --accent: var(--two-step-accent); --accent-bright: var(--two-step-bright);
+  --accent-glow: var(--two-step-glow); --accent-glow-strong: var(--two-step-glow-strong);
+  --accent-subtle: var(--two-step-subtle); --accent-grad: var(--two-step-grad);
+}
+.page[data-program="INSTANT"] {
+  --accent: var(--instant-accent); --accent-bright: var(--instant-bright);
+  --accent-glow: var(--instant-glow); --accent-glow-strong: var(--instant-glow-strong);
+  --accent-subtle: var(--instant-subtle); --accent-grad: var(--instant-grad);
+}
+
+/* ---------- Hero ---------- */
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 116px 0 72px;
+  isolation: isolate;
+}
+.heroGlow {
+  position: absolute;
+  inset: -30% -10% auto -10%;
+  height: 720px;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(620px 360px at 20% 15%, rgba(34, 197, 139, 0.19), transparent 70%),
+    radial-gradient(520px 340px at 80% 5%, rgba(22, 199, 132, 0.12), transparent 70%),
+    radial-gradient(900px 500px at 50% 55%, rgba(14, 159, 104, 0.07), transparent 72%);
+  filter: blur(10px);
+  animation: heroDrift 24s ease-in-out infinite alternate;
+}
+.heroVignette {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 85% 65% at 50% 0%, transparent 38%, var(--bg) 100%);
+}
+@keyframes heroDrift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(1.5%, 2%, 0) scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) { .heroGlow { animation: none; } }
+
+.heroInner { max-width: 900px; margin: 0 auto; text-align: center; }
+.heroEyebrow {
+  font-family: 'Manrope', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--brand);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding: 8px 18px 8px 14px;
+  border: 1px solid var(--border-glow);
+  border-radius: 999px;
+  background: rgba(34, 197, 139, 0.06);
+}
+.heroEyebrow::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--grad);
+  box-shadow: 0 0 10px var(--brand-glow);
+}
+.heroTitle {
+  font-family: 'Unbounded', 'Manrope', sans-serif;
+  font-size: clamp(40px, 5.6vw, 64px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 0 0 24px;
+  background: linear-gradient(180deg, var(--text) 0%, var(--text-dim) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.heroSub {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: clamp(16.5px, 1.9vw, 19.5px);
+  line-height: 1.65;
+  color: var(--muted);
+  max-width: 640px;
+  margin: 0 auto 42px;
+}
+
+.searchWrap { position: relative; max-width: 640px; margin: 0 auto; text-align: left; }
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  background: rgba(10, 20, 14, 0.72);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(16px) saturate(1.15);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  padding: 14px 24px;
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color var(--normal) var(--ease), box-shadow var(--normal) var(--ease);
+}
+.searchBox:focus-within {
+  border-color: var(--border-glow);
+  box-shadow: var(--shadow-lg), var(--shadow-glow-strong), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.searchIconWrap {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--grad-subtle);
+  color: var(--brand);
+}
+.searchInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 17px;
+  font-family: 'Inter', system-ui, sans-serif;
+  min-width: 0;
+}
+.searchInput::placeholder { color: var(--dim); }
+.searchKbdHint {
+  flex-shrink: 0;
+  font-family: 'Manrope', sans-serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--dim);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  white-space: nowrap;
+}
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+.searchClear:hover { color: var(--text); }
+.searchResults {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 50;
+  padding: 8px;
+}
+/* Each result carries its own program's accent (via data-program), same
+   mechanism as the program-selector cards — so a "drawdown" search across
+   multiple programs shows which program each hit belongs to at a glance. */
+.searchResultItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--text);
+}
+.searchResultItem[data-program="ONE_STEP"] { --accent: var(--one-step-accent); --accent-bright: var(--one-step-bright); }
+.searchResultItem[data-program="TWO_STEP"] { --accent: var(--two-step-accent); --accent-bright: var(--two-step-bright); }
+.searchResultItem[data-program="INSTANT"] { --accent: var(--instant-accent); --accent-bright: var(--instant-bright); }
+.searchResultItem:hover, .searchResultItem:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
+  border-left-color: var(--accent, var(--brand));
+  outline: none;
+}
+.searchResultSection {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-bright, var(--brand));
+  margin-bottom: 3px;
+}
+.searchResultLabel { font-size: 15px; font-weight: 600; }
+.searchResultNote { font-size: 13px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+.searchEmpty { padding: 20px 14px; font-size: 14px; color: var(--muted); text-align: center; }
+
+/* ---------- Quick nav cards ---------- */
+.quickNav { padding: 8px 0 56px; position: relative; }
+.quickGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+@media (max-width: 1024px) { .quickGrid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .quickGrid { grid-template-columns: 1fr; } }
+.quickCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 168px;
+  background: linear-gradient(165deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 26px 26px 24px;
+  text-decoration: none;
+  color: var(--text);
+  overflow: hidden;
+  transition: transform var(--normal) var(--ease), border-color var(--normal) var(--ease), box-shadow var(--normal) var(--ease);
+}
+.quickCard::before {
+  content: '';
+  position: absolute;
+  inset: -40% -40% auto auto;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(34, 197, 139, 0.14), transparent 70%);
+  opacity: 0;
+  transition: opacity var(--normal) var(--ease);
+  pointer-events: none;
+}
+.quickCard:hover, .quickCard:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--border-glow);
+  box-shadow: var(--shadow-md), var(--shadow-glow);
+  outline: none;
+}
+.quickCard:hover::before, .quickCard:focus-visible::before { opacity: 1; }
+.quickCard:active { transform: translateY(-1px); }
+.quickEyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.quickIcon {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--grad-subtle);
+  color: var(--brand);
+  border: 1px solid var(--border-glow);
+  transition: transform var(--normal) var(--ease), box-shadow var(--normal) var(--ease);
+}
+.quickCard:hover .quickIcon, .quickCard:focus-visible .quickIcon { transform: translateY(-2px); box-shadow: 0 0 0 4px rgba(34, 197, 139, 0.08); }
+.quickTitle { font-size: 19px; font-weight: 700; margin: 0; }
+.quickDesc { color: var(--muted); font-size: 14.5px; line-height: 1.55; margin: 0; flex: 1; }
+.quickArrow {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: gap var(--normal) var(--ease), color var(--normal) var(--ease);
+}
+.quickCard:hover .quickArrow, .quickCard:focus-visible .quickArrow { color: var(--brand); gap: 10px; }
+
+/* ---------- Program selector: three distinct program "paths", not tabs ---------- */
+.programSelector { padding: 8px 0 12px; position: relative; }
+.programSelectorHead { text-align: center; margin-bottom: 32px; }
+.programSelectorEyebrow { font-size: 14px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-strong); margin-bottom: 10px; }
+.programSelectorTitle { font-family: 'Unbounded', 'Manrope', sans-serif; font-size: clamp(26px, 3vw, 34px); font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.programGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+@media (max-width: 860px) { .programGrid { grid-template-columns: 1fr; } }
+
+.programCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+  padding: 28px 26px 26px;
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--border);
+  background: linear-gradient(165deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform var(--normal) var(--ease), border-color var(--normal) var(--ease), box-shadow var(--normal) var(--ease), background var(--normal) var(--ease);
+}
+.programCard:hover, .programCard:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--accent-glow);
+  outline: none;
+}
+.programCardActive {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  box-shadow: 0 0 0 1.5px var(--accent), var(--shadow-md);
+}
+.programCardActive:hover, .programCardActive:focus-visible { transform: none; }
+.programCardTag {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 4px 11px;
+}
+.programCardIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid var(--accent-glow);
+}
+.programCardName { font-family: 'Unbounded', 'Manrope', sans-serif; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.programCardRefTag { font-size: 10.5px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; margin: -8px 0 0; }
+.programCardDesc { color: var(--muted); font-size: 15px; line-height: 1.55; margin: 0; }
+.programCardMotif {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--accent-bright);
+}
+.programCardMotif span { display: inline-flex; align-items: center; }
+
+/* ---------- Program context header: "you are here", above the doc box ---------- */
+.programContext {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 28px;
+  padding: 32px 36px;
+  margin-bottom: 24px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--accent-subtle), linear-gradient(165deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+  background-blend-mode: normal;
+}
+.programContextLeft { display: flex; align-items: flex-start; gap: 18px; min-width: 0; }
+.programContextIcon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid var(--accent-glow);
+}
+.programContextTag { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-bright); margin-bottom: 6px; }
+.programContextName { font-family: 'Unbounded', 'Manrope', sans-serif; font-size: clamp(28px, 3.2vw, 38px); font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; }
+.programContextDesc { color: var(--muted); font-size: 16.5px; line-height: 1.6; margin: 0; max-width: 520px; }
+
+/* ---------- Journey / stage stepper (varies per program) ---------- */
+.journey { display: flex; align-items: center; flex-wrap: wrap; gap: 0; row-gap: 10px; }
+.journeyStepWrap { display: flex; align-items: center; }
+.journeyStep {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color var(--normal) var(--ease), color var(--normal) var(--ease), background var(--normal) var(--ease);
+}
+.journeyStepStatic { cursor: default; }
+.journeyStep:hover:not(.journeyStepStatic) { border-color: var(--accent); color: var(--text); }
+.journeyStep:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.journeyStepIcon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.journeyStep_current { border-color: var(--accent); color: var(--text); background: var(--accent-subtle); }
+.journeyStep_current .journeyStepIcon { background: var(--accent); color: #04140C; }
+.journeyStep_done { border-color: var(--border-strong); color: var(--muted-strong); }
+.journeyStep_done .journeyStepIcon { background: rgba(255, 255, 255, 0.08); color: var(--accent-bright); }
+.journeyConnector { width: 26px; height: 2px; background: var(--border-strong); margin: 0 4px; flex-shrink: 0; }
+
+/* ---------- Workspace: ambient continuity from hero into the documentation ---------- */
+/* No overflow:hidden on the section itself — .wrap (and the sticky sidebar
+   + context bar inside it) is a sibling of .workspaceAmbient, not its
+   child, but overflow:hidden on a shared ancestor still breaks sticky on
+   everything beneath it. The ambient glow circles clip themselves instead
+   (see .workspaceAmbient below), which contains their bleed without ever
+   sitting between the page scroller and the sticky elements. */
+.workspaceSection { position: relative; padding: 36px 0 88px; }
+.workspaceAmbient { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.workspaceAmbient::before, .workspaceAmbient::after {
+  content: '';
+  position: absolute;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.55;
+}
+.workspaceAmbient::before { top: 60px; left: -180px; background: radial-gradient(circle, rgba(34, 197, 139, 0.13), transparent 70%); }
+.workspaceAmbient::after { top: 420px; right: -200px; background: radial-gradient(circle, rgba(22, 199, 132, 0.09), transparent 70%); }
+
+.workspaceHeader { margin-bottom: 32px; }
+.accountContextLine {
+  font-size: 14px;
+  color: var(--dim);
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.015);
+}
+.accountContextDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--grad);
+  box-shadow: 0 0 6px var(--brand-glow);
+  flex-shrink: 0;
+}
+.accountContextSelect {
+  background: none;
+  border: none;
+  border-bottom: 1px dashed var(--border-strong);
+  color: var(--muted-strong);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0 0 2px;
+  max-width: 300px;
+}
+
+/* ---------- Documentation box: nav pane (program tree) + content pane ---------- */
+.docBox {
+  display: grid;
+  grid-template-columns: 312px 1fr;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+  box-shadow: var(--shadow-lg);
+  /* No overflow:hidden here on purpose — it would clip to its own box and
+     silently break position:sticky on every descendant (navPane, the
+     context bar). The rounded corners are instead cut directly into
+     navPane's own background below, which achieves the same look without
+     that trap. */
+  align-items: stretch;
+}
+@media (max-width: 900px) { .docBox { grid-template-columns: 1fr; border-radius: var(--r-lg); } }
+
+/* Sticky, but intentionally NOT its own scroll container — a long expanded
+   program tree scrolls with the page, not in a cramped inner scrollbar. */
+.navPane {
+  border-right: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.12);
+  padding: 28px 18px;
+  position: sticky;
+  top: 84px;
+  border-top-left-radius: 24px;
+  border-bottom-left-radius: 24px;
+}
+@media (max-width: 900px) {
+  .navPane {
+    border-right: none; border-bottom: 1px solid var(--border); position: static;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+  }
+}
+.navPaneTitle {
+  font-family: 'Unbounded', 'Manrope', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0 0 4px;
+  padding: 0 10px;
+}
+.navPaneSubLabel {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 0 0 16px;
+  padding: 0 10px;
+}
+
+/* ---------- Mobile program/phase/category picker ----------
+   Phones don't get the desktop tree squeezed into them — below 640px this
+   replaces .navPane entirely with three explicit, unmissable dropdowns.
+   Hidden by default (desktop/tablet keep the tree); the 640px block below
+   swaps which one is visible. Both render in the DOM regardless of
+   viewport so there is no hydration/viewport-detection mismatch. */
+.mobilePicker { display: none; flex-direction: column; gap: 16px; padding: 22px 18px; }
+.mobilePickerField { display: flex; flex-direction: column; gap: 7px; }
+.mobilePickerLabel { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.mobilePickerSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 42px 12px 16px;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--accent);
+  background-color: var(--bg-elevated);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23C8D8CE' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"), var(--accent-subtle);
+  background-repeat: no-repeat, no-repeat;
+  background-position: right 14px center, 0 0;
+  background-size: 16px 16px, 100% 100%;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'Manrope', sans-serif;
+  cursor: pointer;
+}
+.mobilePickerSelect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.programGroup { margin-bottom: 4px; }
+.programHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 13px 12px;
+  border-radius: var(--r-sm);
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 15.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--normal) var(--ease), color var(--normal) var(--ease);
+}
+.programHeader:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+.programHeaderOpen { color: var(--text); background: rgba(255, 255, 255, 0.02); }
+.programHeaderActive { color: var(--accent-bright); }
+.programHeaderActive .programHeaderDot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); flex-shrink: 0;
+}
+.programHeader:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.programHeaderLeft { display: flex; align-items: center; gap: 10px; }
+.chevron { flex-shrink: 0; transition: transform var(--normal) var(--ease); color: var(--dim); }
+.chevronOpen { transform: rotate(90deg); }
+.refTag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: var(--dim);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.phaseGroup { margin: 6px 0 10px 16px; padding-left: 14px; border-left: 1px solid var(--border); }
+.phaseGroupLabel {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted-strong);
+  padding: 10px 10px 8px;
+}
+.phaseGroupLabel .phaseTagCurrent {
+  margin-left: 8px;
+  color: var(--accent-bright);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-glow);
+}
+
+.categoryLeaves { display: flex; flex-direction: column; gap: 3px; margin-left: 16px; }
+.phaseGroup .categoryLeaves { margin-left: 0; }
+.categoryLeaf {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 46px;
+  padding: 12px 14px 12px 16px;
+  border-radius: var(--r-sm);
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 15.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background var(--normal) var(--ease), color var(--normal) var(--ease);
+}
+.categoryLeaf:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+.categoryLeafActive { color: var(--text); background: var(--accent-subtle); font-weight: 700; }
+.categoryLeafActive::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-grad);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.categoryLeaf:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.leafIcon { flex-shrink: 0; color: var(--dim); transition: color var(--normal) var(--ease); }
+.categoryLeafActive .leafIcon { color: var(--accent-bright); }
+.leafTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.categoryCount {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.categoryLeafActive .categoryCount { color: var(--accent-bright); background: var(--accent-glow); }
+
+/* ---------- Content pane ---------- */
+/* align-self: start so a short category (e.g. Refund, 1 rule) never gets stretched
+   into a tall empty box just because the sidebar tree next to it is taller. */
+.contentPane { padding: 44px 48px; min-width: 0; align-self: start; }
+@media (min-width: 901px) { .contentPane { min-height: 420px; } }
+@media (max-width: 1024px) { .contentPane { padding: 32px 28px; } }
+@media (max-width: 640px) { .contentPane { padding: 24px 18px; } }
+
+/* Sticky "you never lose context" bar — pinned to the top of the content
+   pane while its rule list scrolls underneath. Replaces a plain breadcrumb
+   with something that stays on screen and always names the active
+   program, so scrolling never disconnects the reader from "what am I
+   reading". */
+.contextBar {
+  position: sticky;
+  top: 84px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding: 14px 20px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent-glow);
+  background: rgba(8, 16, 12, 0.92);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-md);
+  font-family: 'Manrope', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+}
+.contextBarProgram { color: var(--accent-bright); text-transform: uppercase; letter-spacing: 0.04em; }
+.contextBarPhase { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; }
+.contextBarCategory { color: var(--muted-strong); font-weight: 600; }
+.contextBarDot { color: var(--dim); font-weight: 400; }
+.contextBarNote { color: var(--dim); font-weight: 500; font-size: 12.5px; }
+
+.categoryTitleRow { display: flex; align-items: flex-start; gap: 18px; }
+.categoryIconBadge {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid var(--accent-glow);
+  margin-top: 2px;
+}
+
+.panelHeaderRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.panelDivider { height: 1px; background: var(--border); margin: 24px 0; border: none; }
+.ruleCount { font-size: 13px; color: var(--dim); font-weight: 700; letter-spacing: 0.03em; white-space: nowrap; padding-top: 4px; }
+
+.categoryFade { animation: categoryFadeIn 340ms var(--ease); }
+@keyframes categoryFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .categoryFade { animation: none; } }
+
+.content { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+.expandRow { display: flex; gap: 10px; padding: 0 10px; }
+.expandBtn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 14.5px;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color var(--normal) var(--ease), border-color var(--normal) var(--ease), background var(--normal) var(--ease);
+}
+.expandBtn:hover { color: var(--text); border-color: var(--border-strong); background: rgba(255, 255, 255, 0.02); }
+.expandBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- Category section chrome ---------- */
+.section { scroll-margin-top: 84px; }
+.sectionEyebrow { font-size: 13.5px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; color: var(--accent); }
+.sectionTitle { font-size: clamp(27px, 3vw, 34px); margin: 6px 0 6px; font-weight: 700; line-height: 1.15; }
+.sectionLede { color: var(--muted); font-size: 17px; line-height: 1.6; margin: 8px 0 0; max-width: 860px; }
+.badgeRow { display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0 18px; }
+
+/* ---------- Rule accordions — individual premium cards ---------- */
+.accordion { display: flex; flex-direction: column; gap: 12px; }
+.itemAccordion {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: rgba(255, 255, 255, 0.015);
+  overflow: hidden;
+  transition: border-color var(--normal) var(--ease), background var(--normal) var(--ease), box-shadow var(--normal) var(--ease);
+}
+.itemAccordion:hover { border-color: var(--border-strong); }
+/* Subtle by design (spec: the program accent should read quietly here, not
+   compete with the rule content) — border + a faint left rule, not a filled tint. */
+.itemAccordionOpen { border-color: var(--accent-glow); background: rgba(255, 255, 255, 0.02); box-shadow: inset 3px 0 0 var(--accent); }
+.accordionHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 66px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 20px 26px;
+  text-align: left;
+  color: var(--text);
+}
+.accordionHeader:hover .accordionLabel { color: var(--accent-bright); }
+.accordionHeader:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.accordionHeaderLeft { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.accordionIcon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  transition: transform var(--normal) var(--ease), background var(--normal) var(--ease), color var(--normal) var(--ease);
+}
+.accordionIconOpen { transform: rotate(45deg); background: var(--accent-subtle); color: var(--accent); }
+.accordionLabel { font-size: 17.5px; font-weight: 600; transition: color var(--normal) var(--ease); }
+.accordionRight { display: flex; align-items: baseline; gap: 10px; flex-shrink: 0; }
+.accordionValue { font-size: 16.5px; font-weight: 800; font-family: 'Manrope', sans-serif; white-space: nowrap; text-align: right; }
+.accordionValueNs { color: var(--muted); font-weight: 600; }
+.accordionSub { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.accordionPanel {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height var(--slow) var(--ease), opacity var(--normal) var(--ease);
+}
+.accordionPanelOpen { max-height: 420px; opacity: 1; }
+.accordionNote { font-size: 15px; color: var(--muted); line-height: 1.7; padding: 0 26px 22px 68px; }
+@media (prefers-reduced-motion: reduce) {
+  .accordionPanel { transition: none; }
+  .accordionIcon { transition: none; }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+.badgeHard { background: rgba(240, 82, 95, 0.12); color: var(--red); border: 1px solid rgba(240, 82, 95, 0.25); }
+.badgeSoft { background: rgba(245, 185, 62, 0.12); color: var(--gold); border: 1px solid rgba(245, 185, 62, 0.25); }
+
+.plainText { color: var(--muted); font-size: 16px; line-height: 1.75; margin: 0 0 14px; max-width: 820px; }
+.plainText:last-child { margin-bottom: 0; }
+.plainText b { color: var(--text); }
+
+/* ---------- Item accordion body: lines + boxed note ---------- */
+.itemLines { padding: 0 26px 8px 68px; max-width: 820px; display: flex; flex-direction: column; gap: 12px; }
+.itemLine { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; font-size: 16px; line-height: 1.5; }
+.itemLineLabel { color: var(--muted); }
+.itemLineValueWrap { text-align: right; }
+.itemLineValue { font-weight: 700; font-family: 'Manrope', sans-serif; color: var(--text); text-align: right; }
+.itemLineValueNs { color: var(--muted); font-weight: 600; }
+
+.noteBox {
+  margin: 12px 26px 20px 68px;
+  max-width: 820px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+.noteBoxLabel {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.noteBoxText { font-size: 15.5px; color: var(--muted); line-height: 1.7; margin: 0; }
+
+/* ---------- Support CTA ---------- */
+.supportCta {
+  position: relative;
+  margin-top: 32px;
+  text-align: center;
+  padding: 56px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+  overflow: hidden;
+}
+.supportCta::before {
+  content: '';
+  position: absolute;
+  inset: -60% -20% auto -20%;
+  height: 220px;
+  background: radial-gradient(520px 220px at 50% 0%, rgba(34, 197, 139, 0.12), transparent 70%);
+  pointer-events: none;
+}
+.supportTitle {
+  position: relative;
+  font-size: clamp(20px, 2.6vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  font-family: 'Manrope', sans-serif;
+}
+.supportSub { position: relative; color: var(--muted); font-size: 16px; max-width: 520px; margin: 0 auto 26px; line-height: 1.6; }
+.supportBtns { position: relative; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+/* ---------- Search: suggestions + a11y-safe clear ---------- */
+.searchEmptyTitle { font-size: 15px; font-weight: 700; color: var(--text-dim); margin-bottom: 10px; }
+.searchSuggestRow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.searchSuggestChip {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  color: var(--muted-strong);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.searchSuggestChip:hover { color: var(--text); border-color: var(--border-strong); }
+.searchSuggestChip:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+/* ---------- Loading skeleton (shape of the real layout, no fake copy) ---------- */
+.skeletonWrap { padding: 96px 0 64px; }
+.skeletonHeroBar {
+  height: 24px;
+  width: 170px;
+  margin: 0 auto 26px;
+  border-radius: 999px;
+}
+.skeletonHeroTitle {
+  height: 54px;
+  width: min(580px, 70%);
+  margin: 0 auto 38px;
+  border-radius: 14px;
+}
+.skeletonSearch {
+  height: 64px;
+  max-width: 640px;
+  margin: 0 auto 56px;
+  border-radius: var(--r-lg);
+}
+.skeletonGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-bottom: 56px; }
+@media (max-width: 1024px) { .skeletonGrid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .skeletonGrid { grid-template-columns: 1fr; } }
+.skeletonCard { height: 168px; border-radius: var(--r-lg); }
+.skeletonBoxRow { display: grid; grid-template-columns: 312px 1fr; gap: 0; border-radius: 24px; overflow: hidden; }
+@media (max-width: 900px) { .skeletonBoxRow { grid-template-columns: 1fr; } }
+.skeletonNav { height: 440px; }
+.skeletonContent { padding: 44px; display: flex; flex-direction: column; gap: 14px; }
+.skeletonLine { height: 16px; border-radius: 6px; }
+.skeletonLineShort { width: 40%; }
+.shimmer {
+  background: linear-gradient(100deg, var(--bg-card) 30%, var(--bg-elevated) 50%, var(--bg-card) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from { background-position: 140% 0; }
+  to { background-position: -40% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer { animation: none; background: var(--bg-card); }
+}
+
+/* ---------- Error / empty states ---------- */
+.stateCard {
+  text-align: center;
+  padding: 56px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-card);
+}
+.stateTitle { font-size: 20px; font-weight: 700; margin: 0 0 10px; }
+.stateSub { color: var(--muted); font-size: 16px; max-width: 460px; margin: 0 auto 20px; line-height: 1.6; }
+.accountNotice {
+  font-size: 13.5px;
+  color: var(--dim);
+  margin: 12px 0 0;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: inline-flex;
+}
+
+/* ---------- Reduced motion: consolidated overrides for interactive shifts ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .quickCard, .quickIcon, .quickArrow, .categoryLeaf, .itemAccordion, .expandBtn, .programHeader { transition: none; }
+  .quickCard:hover, .quickCard:focus-visible { transform: none; }
+  .quickCard:hover .quickIcon, .quickCard:focus-visible .quickIcon { transform: none; }
+}
+
+/* ---------- Mobile: comfortable touch targets, no desktop-shrunk-down text ---------- */
+@media (max-width: 640px) {
+  .hero { padding: 88px 0 48px; }
+  .heroSub { margin-bottom: 34px; }
+  .searchWrap { max-width: 100%; }
+  .quickCard { padding: 22px 22px 20px; }
+  .programGrid { gap: 16px; }
+  .programCard { padding: 22px 22px 20px; }
+  .programContext { padding: 24px 22px; gap: 20px; }
+  .journey { width: 100%; }
+  .journeyConnector { width: 16px; }
+  .journeyStep { padding: 8px 12px; font-size: 12px; }
+  .docBox { border-radius: var(--r-lg); }
+  .navPane { display: none; }
+  .mobilePicker { display: flex; }
+  .contextBar { font-size: 13px; padding: 12px 16px; }
+  .categoryIconBadge { width: 44px; height: 44px; border-radius: 12px; }
+  .accordionHeader { padding: 16px 18px; min-height: 60px; }
+  .accordionNote { padding: 0 18px 18px 18px; }
+  .itemLines { padding: 0 18px 6px 18px; }
+  .noteBox { margin: 10px 18px 16px 18px; }
+  .supportCta { padding: 40px 20px; }
+  /* A long value (e.g. a comma-separated instrument list) no longer wraps
+     awkwardly right-aligned under a short label — label on its own line,
+     value below it, both left-aligned and easy to scan on a phone. */
+  .itemLine { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .itemLineValueWrap { text-align: left; }
+  .itemLineValue { text-align: left; }
+}

@@ -1,0 +1,126 @@
+-- ============================================================
+-- Trade/equity write-path hardening  ·  Batch 24  ·  additive
+-- DEPLOYMENT STAGE: C, step 2 of 2 (Phase 17 review fix)
+--
+-- Kept as its own migration, separate from Batch 23/23b's idempotency
+-- changes — this one is a privilege change, not a schema/function change,
+-- and a project owner may reasonably want to review or apply it on its
+-- own timeline. Apply this AFTER supabase/trade-idempotency-cutover.sql
+-- (Stage C step 1), once the old 4-argument admin_add_trade is confirmed
+-- retired — see that file and supabase/trade-request-idempotency.sql for
+-- the full A/B/C staging. Nothing in THIS file's own effect actually
+-- depends on that ordering (see the SECURITY DEFINER note below), but the
+-- deployment plan sequences it last regardless, out of caution.
+--
+-- AUDIT (Phase 17, RE-VERIFIED and EXTENDED for the Phase 17 review fix):
+--   Searched every `.from('accounts')` / `.from('trades')` call in the
+--   application, and the SQL body of every function that touches either
+--   table, for INSERT/UPDATE/DELETE. Re-run fresh for this review fix
+--   rather than assumed from the original Phase 17 audit. Result:
+--
+--     - public.trades: ZERO application code paths insert, update, or
+--       delete a trade row directly — every `.from('trades')` call site
+--       in the repo (app/admin/page.js, app/portal/page.js,
+--       app/portal/accounts/[id]/page.js, app/portal/analytics/page.js,
+--       app/portal/settings/page.js, hooks/useAccountRisk.js) is a
+--       `.select(...)` only. The only writer of any kind is
+--       admin_add_trade (SECURITY DEFINER, both the Batch 22 4-argument
+--       and Batch 23 5-argument versions) — and its own SQL body performs
+--       ONLY `insert into public.trades`, never an UPDATE or DELETE on it.
+--       No other function in any migration touches public.trades at all.
+--       The original Phase 17 write-up already found this, but reasoned
+--       that leaving UPDATE/DELETE grantable was acceptable because "no
+--       correction feature exists yet" — that conflated the absence of a
+--       correction FEATURE with the absence of a reason to close the base
+--       PRIVILEGE. This file corrects that: closing the privilege now
+--       does not block building a correction feature later, because any
+--       future correction RPC would be its own SECURITY DEFINER function
+--       and would be unaffected by what is revoked from `authenticated`
+--       here, for the exact same ownership reason admin_add_trade already
+--       is (see below).
+--     - public.accounts: exactly ONE direct-write call site exists —
+--       app/admin/page.js's updateAccountField(id, patch, note) — and it
+--       is called with exactly two patch shapes across the whole app:
+--       { phase } and { day_start_equity }. It is NEVER called with
+--       { equity } or { status } (status changes already go through the
+--       separate admin_set_account_status SECURITY DEFINER RPC, from
+--       Batch 15/20). accounts.equity has had no direct application
+--       writer since Batch 22 moved it into admin_add_trade.
+--
+--   This means every privilege revoked below is unused by any verified
+--   legitimate code path today — removing them cannot break phase
+--   changes, day_start_equity resets, account status changes, or any
+--   other current admin workflow, all of which were traced above.
+--
+-- WHAT THIS DOES
+--   1. Revokes INSERT, UPDATE, and DELETE on public.trades from
+--      `authenticated` — the only way to write a trade row at all becomes
+--      admin_add_trade. SELECT is untouched (every read path above keeps
+--      working). admin_add_trade does not need INSERT for itself: a
+--      SECURITY DEFINER function runs with the privileges of its OWNER
+--      (not the calling role), so revoking `authenticated`'s own INSERT
+--      privilege has no effect on it.
+--   2. Revokes UPDATE specifically on the `equity` COLUMN of
+--      public.accounts from `authenticated` (a column-level privilege,
+--      layered on top of — not replacing — the table-level UPDATE grant
+--      that phase/day_start_equity/other columns still rely on).
+--      admin_add_trade's internal equity UPDATE is unaffected for the
+--      same SECURITY DEFINER/ownership reason as (1).
+--   3. Defensively re-states the same revokes for `anon` and `PUBLIC`.
+--      No SQL file in this repository (18 files, all read for this
+--      review) grants trades/accounts privileges to PUBLIC or anon
+--      explicitly — the working assumption, consistent with standard
+--      Supabase project provisioning, is that base table privileges come
+--      from per-role grants to anon/authenticated/service_role at project
+--      creation, not from a PUBLIC grant. That cannot be verified against
+--      the live catalog in this environment (no DB/catalog access exists
+--      in this session, consistent with every prior phase). Since a
+--      REVOKE of a privilege that was never granted is a safe, silent
+--      no-op in Postgres, revoking from all three roles defensively costs
+--      nothing and closes the theoretical gap either way, rather than
+--      leaving it unverified.
+--
+-- WHAT THIS DELIBERATELY DOES NOT DO
+--   - Does NOT touch SELECT on either table.
+--   - Does NOT touch any other public.accounts column (phase,
+--     day_start_equity, status, etc.) — those remain exactly as
+--     permissive as they already were, verified above to be the only
+--     things actually using direct writes.
+--   - Does NOT change any RLS policy — "trades own read"/"trades admin
+--     write"/"trades admin update"/"accounts admin all" are all
+--     untouched. RLS decides which ROWS a query may see/affect; this
+--     migration narrows which OPERATIONS are grantable at all, a
+--     separate and independently-stacking layer. In particular, "trades
+--     admin update ... for all using (is_admin())" — the policy that used
+--     to let an admin UPDATE/DELETE trades directly — is left in place
+--     but becomes unreachable via the normal `authenticated` client once
+--     this file is applied, since the base UPDATE/DELETE privilege it
+--     depends on no longer exists for that role; dropping the now-inert
+--     policy itself was judged unnecessary per "do not modify RLS
+--     unnecessarily."
+--   - Does NOT affect service_role, which already bypasses RLS and table
+--     grants entirely and is never exposed to the browser (confirmed
+--     across every prior phase's audit — only scripts/run-migrations.js
+--     ever references SUPABASE_SERVICE_ROLE_KEY, and only server-side).
+--
+-- RESIDUAL, KNOWINGLY-ACCEPTED SCOPE LIMIT (documented, not solved here):
+--   This does not, and cannot by itself, force every possible future
+--   write through admin_add_trade — it only closes the direct-write
+--   vectors verified above to have no legitimate use today. If a future
+--   feature (e.g. the deferred trade correction/reversal feature)
+--   legitimately needs a new direct write or a new SECURITY DEFINER RPC,
+--   that is a new, deliberate grant decision to make at that time, not a
+--   gap in this migration.
+--
+-- SAFE TO RUN REPEATEDLY: every statement below is a REVOKE; revoking an
+-- already-revoked (or never-granted) privilege is a silent no-op in
+-- Postgres.
+-- ============================================================
+
+revoke insert, update, delete on public.trades from authenticated;
+revoke insert, update, delete on public.trades from anon;
+revoke insert, update, delete on public.trades from public;
+
+revoke update (equity) on public.accounts from authenticated;
+revoke update (equity) on public.accounts from anon;
+revoke update (equity) on public.accounts from public;

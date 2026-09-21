@@ -31,6 +31,7 @@ export class TVChart {
     this.theme = options.theme || TV_LIGHT_THEME;
     this.onReady = options.onReady || null;
     this.onError = options.onError || null;
+    this.onClick = options.onClick || null;
     this.chart = null;
     this.series = null;
     this.symbol = null;
@@ -42,6 +43,16 @@ export class TVChart {
     this._levelPreview = null;
     this._retries = 2;
     this._retryDelay = 2000;
+    // True only once the candles currently installed on the series actually
+    // belong to `this.symbol` (i.e. the most recent setSymbol() call has
+    // fully resolved — success OR exhausted-retry failure, both of which
+    // leave `this.candles` in a state that matches the CURRENT identity).
+    // False for the entire window between "a new symbol/timeframe was
+    // requested" and "its data landed" — anything reading candles during
+    // that window (a live tick, an OHLC header) must treat the chart as
+    // not-yet-loaded rather than trusting whatever is still in `this.candles`
+    // from the PREVIOUS symbol. See Phase 21A round 2.
+    this._candlesReady = false;
     this._init();
   }
 
@@ -53,6 +64,11 @@ export class TVChart {
     this._disposers.push(
       bindChartEvents(chart, this.series, {
         onCrosshair: (payload) => this.crosshair.emit(payload),
+        // Lightweight Charts' own native click subscription (Phase 21B,
+        // Scalper mode) — entirely separate from the custom drawing
+        // overlay's own pointer handling, so wiring this never touches or
+        // risks the drawing engine (Phase 20 scope).
+        onClick: this.onClick ? (payload) => this.onClick(payload) : undefined,
       }),
     );
 
@@ -107,21 +123,33 @@ export class TVChart {
       const paneIndex = lower ? 1 : 0;
       const points = item.points || [];
       let series = null;
+      // paneIndex is lightweight-charts' addSeries(definition, options, paneIndex)
+      // THIRD positional argument (confirmed against the library's own type
+      // definitions) — it is NOT a SeriesOptions property. Passing it inside
+      // the options object (as this code previously did) is silently
+      // ignored by the library, so every "lower" indicator (volume/rsi/
+      // histogram) ended up added to pane 0 — the SAME pane, and therefore
+      // the SAME price scale, as the main candlestick series — instead of
+      // its own separate lower pane. Root cause (Phase 21A): with every
+      // real candle currently reporting volume: 0, that misplaced volume
+      // histogram sits at price 0 on the shared scale, forcing autoscale to
+      // stretch the whole price axis down to include 0 alongside the
+      // candles' real ~23,300 range — exactly the "absurdly wide Y-axis"
+      // symptom. Fixed by passing paneIndex as its own argument, so lower
+      // indicators genuinely land on pane 1, with their own scale.
       if (item.kind === 'volume') {
         series = this.chart.addSeries(HistogramSeries, {
           priceFormat: { type: 'volume' },
           lastValueVisible: false,
           priceLineVisible: false,
-          paneIndex,
-        });
+        }, paneIndex);
         series.setData(points.map((p) => ({ time: p.time, value: p.value, color: p.rising ? '#26a69a' : '#ef5350' })));
       } else if (item.kind === 'histogram') {
         series = this.chart.addSeries(HistogramSeries, {
           color: item.color || '#8a8f98',
           lastValueVisible: false,
           priceLineVisible: false,
-          paneIndex,
-        });
+        }, paneIndex);
         series.setData(points.map((p) => ({ time: p.time, value: p.price })));
       } else {
         series = this.chart.addSeries(LineSeries, {
@@ -129,8 +157,7 @@ export class TVChart {
           lineWidth: 2,
           lastValueVisible: false,
           priceLineVisible: false,
-          paneIndex,
-        });
+        }, paneIndex);
         series.setData(points.map((p) => ({ time: p.time, value: p.price })));
       }
       this._indicatorSeries.push(series);
@@ -140,8 +167,27 @@ export class TVChart {
 
   async setSymbol({ exchange, token, symbol, interval }, signal) {
     const relayInterval = resolveRelayInterval(interval);
+    // A fresh object every call: _fetch() below captures this exact
+    // reference as `targetSymbol` and only installs its response if
+    // `this.symbol` still === that reference when the response lands —
+    // if a newer setSymbol() ran in the meantime, this.symbol has already
+    // been reassigned to a DIFFERENT object, so a late/superseded response
+    // is discarded instead of overwriting the newer symbol's candles.
     this.symbol = { exchange, token, symbol, interval: relayInterval };
+    this._candlesReady = false;
+    // Invalidate the OLD symbol's candles immediately, synchronously,
+    // before the new request even starts — required lifecycle order per
+    // Phase 21A round 2 ("old chart dataset invalidated" precedes "new
+    // request started"). Without this, the series keeps rendering the
+    // previous symbol's candles (wrong price range, wrong shape) for the
+    // full duration of the new fetch, alongside the NEW symbol's header and
+    // live LTP — i.e. exactly "BANKNIFTY LTP + NIFTY candles" shown at once.
+    this.setCandles([]);
     return this._fetch(relayInterval, signal);
+  }
+
+  isCandlesReady() {
+    return !!this._candlesReady;
   }
 
   async setTimeframe(interval, signal) {
@@ -153,6 +199,7 @@ export class TVChart {
   }
 
   async _fetch(relayInterval, externalSignal) {
+    const targetSymbol = this.symbol;
     if (this._fetchController) this._fetchController.abort();
     const controller = new AbortController();
     this._fetchController = controller;
@@ -161,12 +208,19 @@ export class TVChart {
     for (let attempt = 0; attempt <= this._retries; attempt += 1) {
       try {
         const rows = await marketData.history(
-          this.symbol.exchange,
-          this.symbol.token,
+          targetSymbol.exchange,
+          targetSymbol.token,
           relayInterval,
           signal,
         );
+        // this.symbol may have moved on to a NEWER symbol/timeframe while
+        // this request was in flight (belt-and-suspenders on top of the
+        // AbortController chain — see comment in setSymbol()). Silently
+        // drop a superseded response rather than grafting it onto the
+        // current identity.
+        if (this.symbol !== targetSymbol) return this;
         this.setCandles(rows);
+        this._candlesReady = true;
         return this;
       } catch (error) {
         if (error?.name === 'AbortError') throw error;
@@ -175,6 +229,14 @@ export class TVChart {
           await new Promise((resolve) => setTimeout(resolve, this._retryDelay));
         }
       }
+    }
+    if (this.symbol === targetSymbol) {
+      // Every retry failed for the CURRENT symbol: clear whatever candles
+      // are still installed (almost certainly the previous symbol's) so a
+      // failed BANKNIFTY load never leaves misleading NIFTY candles visible
+      // under a BANKNIFTY header — an honest empty chart instead.
+      this.setCandles([]);
+      this._candlesReady = true;
     }
     this.onError?.(lastError);
     throw lastError;

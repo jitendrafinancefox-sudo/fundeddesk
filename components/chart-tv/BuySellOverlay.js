@@ -22,9 +22,15 @@ const btnBase = {
 
 export default function BuySellOverlay({ exchange = 'NSE', token, symbol, underlying, kind = 'future', onOrder }) {
   const quote = usePrice(token);
+  // bid/ask displayed on the BUY/SELL buttons fall back to LTP when no real
+  // bid/ask exists — an honest "your paper order references this price",
+  // not a depth claim. `spread`, though, is only ever computed from the
+  // SOURCE fields (quote.bid/quote.ask directly, before any fallback) so it
+  // reads "—" rather than a fabricated "0.00" whenever no real bid/ask was
+  // actually sourced (e.g. index spot instruments — see LiveQuoteFeed.js).
   const bid = quote?.bid ?? quote?.ltp ?? null;
   const ask = quote?.ask ?? quote?.ltp ?? null;
-  const spread = bid != null && ask != null ? Math.max(0, ask - bid) : null;
+  const spread = quote?.bid != null && quote?.ask != null ? Math.max(0, quote.ask - quote.bid) : null;
 
   // When an order-entry callback is provided, clicking BUY/SELL opens the
   // OrderPanel (full lots/SL/TP flow) instead of placing the order directly.

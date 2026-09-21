@@ -88,7 +88,7 @@ export default function OpenPositionsTable({
             gridTemplateColumns: '140px 70px 80px 100px 100px 100px 100px 110px 90px 80px', 
             gap: '16px',
             padding: '12px 16px',
-            background: 'rgba(34,197,139,0.03)',
+            background: 'rgba(255,255,255,0.02)',
             borderBottom: '1px solid var(--border)',
             fontSize: '10.5px',
             fontWeight: 700,
@@ -109,7 +109,7 @@ export default function OpenPositionsTable({
                 gridTemplateColumns: '140px 70px 80px 100px 100px 100px 100px 110px 90px 80px',
                 gap: '16px',
                 padding: '12px 16px',
-                borderBottom: i < 4 ? '1px solid rgba(34,197,139,0.06)' : 'none',
+                borderBottom: i < 4 ? '1px solid var(--border)' : 'none',
                 alignItems: 'center',
               }}>
                 {Array.from({ length: 10 }).map((__, c) => (
@@ -130,15 +130,11 @@ export default function OpenPositionsTable({
           <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Open Positions</h3>
           <span className="tag tag-blue" style={{ fontSize: 10 }}>LIVE</span>
         </div>
-        <div style={{ padding: '18px 18px 20px', textAlign: 'center' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg2)', display: 'grid', placeItems: 'center', margin: '0 auto 10px', fontSize: '18px' }}>📭</div>
+        <div style={{ padding: '22px 18px 26px', textAlign: 'center' }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No open positions</div>
-          <p className="muted" style={{ marginBottom: 12, maxWidth: 300, marginLeft: 'auto', marginRight: 'auto', fontSize: 12 }}>
-            Open the terminal to start trading.
+          <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>
+            Trades you currently have running appear here.
           </p>
-          <a href="/portal/terminal" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', fontSize: 12.5 }}>
-            Open Terminal →
-          </a>
         </div>
       </div>
     );
@@ -191,12 +187,12 @@ export default function OpenPositionsTable({
               gridTemplateColumns: '140px 70px 80px 100px 100px 100px 100px 110px 90px 80px',
               gap: '16px',
               padding: '12px 20px',
-              borderBottom: index < enrichedPositions.length - 1 ? '1px solid rgba(34,197,139,0.06)' : 'none',
+              borderBottom: index < enrichedPositions.length - 1 ? '1px solid var(--border)' : 'none',
               alignItems: 'center',
               transition: 'background var(--fast) var(--ease)',
               minWidth: '970px',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,197,139,0.03)'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
             <div style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 600, fontSize: 12.5, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

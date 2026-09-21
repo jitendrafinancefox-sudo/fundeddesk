@@ -46,7 +46,7 @@ export default function AccountSelector({
           padding: '8px 16px 8px 12px',
           borderRadius: '99px',
           border: '1px solid var(--line2)',
-          background: 'rgba(34,197,139,0.08)',
+          background: 'var(--card, #0E111C)',
           color: 'var(--text)',
           fontSize: '13.5px',
           fontWeight: 500,
@@ -59,13 +59,13 @@ export default function AccountSelector({
         }}
         onMouseEnter={(e) => {
           if (!loading) {
-            e.currentTarget.style.background = 'rgba(34,197,139,0.12)';
-            e.currentTarget.style.borderColor = 'rgba(34,197,139,0.3)';
+            e.currentTarget.style.background = 'var(--bg-card-hover, #16191D)';
+            e.currentTarget.style.borderColor = 'var(--border-strong, #33373E)';
           }
         }}
         onMouseLeave={(e) => {
           if (!loading) {
-            e.currentTarget.style.background = 'rgba(34,197,139,0.08)';
+            e.currentTarget.style.background = 'var(--card, #0E111C)';
             e.currentTarget.style.borderColor = 'var(--line2)';
           }
         }}

@@ -13,21 +13,21 @@ const segStyle = {
   alignItems: 'center',
   gap: 4,
   padding: '0 8px',
-  borderRight: '1px solid #e0e3eb',
+  borderRight: '1px solid var(--border)',
   height: '100%',
   fontSize: 10,
   fontFamily: 'Inter, sans-serif',
   fontVariantNumeric: 'tabular-nums',
   whiteSpace: 'nowrap',
 };
-const labelStyle = { color: '#b2b5be', fontWeight: 500 };
-const valueStyle = { color: '#222222', fontWeight: 600 };
+const labelStyle = { color: 'var(--dim)', fontWeight: 500 };
+const valueStyle = { color: 'var(--text)', fontWeight: 600 };
 
 function Dot({ on }) {
   return (
     <span style={{
       width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-      background: on ? '#26a69a' : '#ef5350',
+      background: on ? 'var(--green)' : 'var(--red)',
       boxShadow: on ? '0 0 0 2px rgba(38,166,154,0.2)' : '0 0 0 2px rgba(239,83,80,0.15)',
     }} />
   );
@@ -102,14 +102,14 @@ export default function StatusBar({ data }) {
       flexShrink: 0,
       display: 'flex',
       alignItems: 'center',
-      background: T.colors.bgAlt,
-      borderTop: T.border.soft,
+      background: 'var(--bg2)',
+      borderTop: '1px solid var(--border)',
       fontFamily: T.font.family,
       fontSize: 10,
       userSelect: 'none',
       overflow: 'hidden',
     }}>
-      <div style={{ ...segStyle, paddingLeft: 10, color: T.colors.muted, fontWeight: 600 }}>
+      <div style={{ ...segStyle, paddingLeft: 10, color: 'var(--muted)', fontWeight: 600 }}>
         <Dot on={IS_MARKET_OPEN()} />
         {IS_MARKET_OPEN() ? 'Market Open' : 'Market Closed'}
       </div>
@@ -118,9 +118,9 @@ export default function StatusBar({ data }) {
         <span style={valueStyle}>{tz}</span>
       </div>
       <div style={segStyle}>
-        <span style={labelStyle}>Conn</span>
-        <span style={{ color: connected ? T.colors.up : T.colors.down, fontWeight: 700 }}>
-          {connected ? 'LIVE' : 'OFFLINE'}
+        <span style={labelStyle}>Feed</span>
+        <span style={{ color: connected ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>
+          {connected ? 'DATA LIVE' : 'OFFLINE'}
         </span>
       </div>
       <div style={segStyle}>
@@ -129,7 +129,7 @@ export default function StatusBar({ data }) {
       </div>
       <div style={segStyle}>
         <span style={labelStyle}>FPS</span>
-        <span style={{ color: status.fps != null && status.fps < 40 ? T.colors.down : T.colors.text, fontWeight: 700 }}>
+        <span style={{ color: status.fps != null && status.fps < 40 ? 'var(--red)' : 'var(--text)', fontWeight: 700 }}>
           {status.fps ?? '—'}
         </span>
       </div>

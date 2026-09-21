@@ -1,47 +1,56 @@
 import { NextResponse } from 'next/server';
+import { FEEDS, parseRssFeed, mergeArticles } from '@/lib/providers/news';
 
-const FEEDS = [
-  { name: 'Economic Times', url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms' },
-  { name: 'Moneycontrol',   url: 'https://www.moneycontrol.com/rss/marketreports.xml' },
-];
+// Always run on request (not prerendered at build) — the RSS fetch must not
+// execute in the build sandbox. A CDN can still cache via the header below.
+export const dynamic = 'force-dynamic';
 
-function extractItems(xml) {
-  const items = [];
-  const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
-  let match;
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const block = match[1];
-    const tag = (name) => {
-      const m = block.match(new RegExp('<' + name + '[^>]*>(.*?)</' + name + '>', 'is'));
-      if (!m) return null;
-      let val = m[1].trim();
-      // strip CDATA if present
-      const cdata = val.match(/<!\[CDATA\[(.*?)\]\]>/s);
-      if (cdata) val = cdata[1].trim();
-      return val;
-    };
-    const title = tag('title');
-    const link = tag('link');
-    const pubDate = tag('pubDate');
-    if (title && pubDate) items.push({ title, link, pubDate });
+const FEED_TIMEOUT_MS = 6000;
+
+async function fetchFeed(feed) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), FEED_TIMEOUT_MS);
+  try {
+    const res = await fetch(feed.url, {
+      signal: ctrl.signal,
+      headers: { 'user-agent': 'FundedDesk/1.0 (+market-news)' },
+      cache: 'no-store',
+    });
+    if (!res.ok) return { name: feed.name, ok: false, articles: [] };
+    const xml = await res.text();
+    return { name: feed.name, ok: true, articles: parseRssFeed(xml, feed.name) };
+  } catch (e) {
+    return { name: feed.name, ok: false, articles: [] };
+  } finally {
+    clearTimeout(t);
   }
-  return items;
 }
 
 export async function GET() {
-  try {
-    const results = await Promise.all(
-      FEEDS.map(async (feed) => {
-        const res = await fetch(feed.url, { next: { revalidate: 120 } });
-        if (!res.ok) return [];
-        const xml = await res.text();
-        return extractItems(xml).map((item) => ({ ...item, source: feed.name }));
-      })
+  const results = await Promise.all(FEEDS.map(fetchFeed));
+  const okFeeds = results.filter((r) => r.ok);
+  const articles = mergeArticles(results.map((r) => r.articles)).slice(0, 30);
+
+  if (okFeeds.length === 0) {
+    return NextResponse.json(
+      {
+        articles: [],
+        fetchedAt: new Date().toISOString(),
+        sources: FEEDS.map((f) => f.name),
+        degraded: true,
+        error: 'No news feeds could be reached.',
+      },
+      { status: 503 },
     );
-    const merged = results.flat();
-    merged.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-    return NextResponse.json(merged.slice(0, 20));
-  } catch (e) {
-    return NextResponse.json({ error: e.message || 'Failed to fetch news' }, { status: 500 });
   }
+
+  return NextResponse.json(
+    {
+      articles,
+      fetchedAt: new Date().toISOString(),
+      sources: okFeeds.map((r) => r.name),
+      degraded: okFeeds.length < FEEDS.length,
+    },
+    { headers: { 'cache-control': 's-maxage=120, stale-while-revalidate=300' } },
+  );
 }

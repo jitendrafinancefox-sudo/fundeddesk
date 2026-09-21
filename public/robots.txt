@@ -1,0 +1,34 @@
+# FundedDesk robots.txt
+User-agent: *
+Allow: /
+
+# Disallow private/admin routes
+Disallow: /portal/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /login
+Disallow: /signup
+Disallow: /login/
+Disallow: /signup/
+Disallow: /forgot-password/
+Disallow: /reset-password/
+
+# Allow public pages
+Allow: /$
+Allow: /challenges
+Allow: /rules
+Allow: /faq
+Allow: /about
+Allow: /blog
+Allow: /blog/
+Allow: /blog/*
+Allow: /rules
+Allow: /faq
+Allow: /india
+Allow: /challenges
+
+# Sitemap location
+Sitemap: https://fundeddesk.com/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 10
