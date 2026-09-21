@@ -265,7 +265,7 @@
 
 .programContext { text-align: left; margin: 0 0 10px; }
 .programContextTitle { font-family: 'Unbounded', 'Manrope', sans-serif; font-size: clamp(19px, 2vw, 23px); font-weight: 700; margin: 0 0 3px; letter-spacing: -0.01em; }
-.programContextDesc { font-family: 'Inter', system-ui, sans-serif; font-size: 13.5px; line-height: 1.35; color: var(--muted); margin: 0 0 4px; max-width: 460px; }
+.programContextDesc { font-family: 'Inter', system-ui, sans-serif; font-size: 13.5px; line-height: 1.35; color: var(--muted); margin: 0 0 4px; max-width: 460px; text-shadow: 0 2px 10px rgba(0,0,0,0.7), 0 0 16px rgba(0,0,0,0.4); }
 .programContextLifecycle { font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent-bright, var(--muted-strong)); }
 
 .workspaceGrid { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 24px; align-items: stretch; }
@@ -281,6 +281,12 @@
   .planSelectorList { flex-direction: row; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
   .planSelectorList::-webkit-scrollbar { height: 0; }
 }
+/* Phone widths: a horizontally-scrollable row hides options off-edge and
+   invites mis-taps. Below 640px the account-size list goes back to a full
+   -width vertical stack — every option visible, no scroll discovery needed. */
+@media (max-width: 640px) {
+  .planSelectorList { flex-direction: column; overflow-x: visible; padding-bottom: 0; }
+}
 .planOption {
   position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px;
   padding: 12px 16px; border-radius: var(--r); border: 1px solid rgba(120, 200, 175, 0.14); background: rgba(6, 14, 10, 0.5);
@@ -289,6 +295,7 @@
   transition: border-color 240ms var(--ease), background 240ms var(--ease), color 240ms var(--ease), box-shadow 240ms var(--ease), transform 240ms var(--ease);
 }
 @media (max-width: 900px) { .planOption { flex-direction: column; align-items: flex-start; gap: 4px; flex: 0 0 auto; min-width: 150px; } }
+@media (max-width: 640px) { .planOption { flex-direction: row; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; width: 100%; min-height: 56px; } }
 .planOption:hover { color: var(--text); border-color: var(--border-strong); transform: translateY(-2px); box-shadow: 0 10px 22px -14px rgba(0,0,0,0.6); }
 .planOption:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .planOptionActive {

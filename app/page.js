@@ -374,8 +374,8 @@ export default function Home() {
           <motion.div className="sec-head" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px 0px -10% 0px" }} transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}>
             <h2>Why traders pick <span className="grad-text">FundedDesk</span></h2>
           </motion.div>
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <table className="tbl" style={{ fontSize: 15 }}>
+          <div className="card cmp-table-card" style={{ padding: 0 }}>
+            <table className="tbl cmp-table" style={{ fontSize: 15 }}>
               <thead>
                 <tr>
                   <th style={{ paddingLeft: 26 }}>Feature</th>
@@ -586,7 +586,7 @@ export default function Home() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '48px', marginBottom: '48px' }}>
             <div style={{ maxWidth: '320px' }}>
               <div className="logo" style={{ marginBottom: '16px' }}><span className="logo-mark">◆</span>FundedDesk</div>
-              <p className="body-sm" style={{ color: 'var(--muted)', lineHeight: 1.7 }}>India\'s premier options trading prop firm. Transparent rules. Fast payouts. Built for serious traders.</p>
+              <p className="body-sm" style={{ color: 'var(--muted)', lineHeight: 1.7 }}>India&rsquo;s premier options trading prop firm. Transparent rules. Fast payouts. Built for serious traders.</p>
             </div>
             <div style={{ display: 'flex', gap: '64px', flexWrap: 'wrap' }}>
               <div>

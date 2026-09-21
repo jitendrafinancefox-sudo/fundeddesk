@@ -3,44 +3,45 @@
 import { useEffect, useRef, useState } from 'react';
 
 const TOTAL_FRAMES = 258;
-const FRAME_STEP = 2;
-const FRAMES = Array.from({ length: Math.ceil(TOTAL_FRAMES / FRAME_STEP) }, (_, i) =>
-  `/sequence/ezgif-frame-${String((i * FRAME_STEP) + 1).padStart(3, '0')}.jpg`
-);
+// Mobile connections shouldn't pay for the same frame density as desktop —
+// coarser stepping roughly halves the preload payload where fine-grained
+// scrubbing matters least (a short mobile scroll never needs 129 frames).
+function frameStepFor(width) { return width > 0 && width < 768 ? 4 : 2; }
+function buildFrames(step) {
+  return Array.from({ length: Math.ceil(TOTAL_FRAMES / step) }, (_, i) =>
+    `/sequence/ezgif-frame-${String((i * step) + 1).padStart(3, '0')}.jpg`);
+}
 
 export default function PageBackgroundSequence() {
   const canvasRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
+  const [frames] = useState(() => buildFrames(frameStepFor(typeof window !== 'undefined' ? window.innerWidth : 0)));
   const imagesRef = useRef([]);
   const rafRef = useRef(0);
   const currentFrameRef = useRef(-1);
-  const loadingCountRef = useRef(0);
 
-  // Preload images
+  // Preload images. The canvas reveals as soon as the FIRST frame is ready —
+  // not once every frame has loaded — so a slow connection never leaves the
+  // page pinned to a blank/black background while the rest stream in behind it.
   useEffect(() => {
     let cancelled = false;
-    loadingCountRef.current = 0;
 
-    FRAMES.forEach((src, i) => {
+    frames.forEach((src, i) => {
       const img = new Image();
       img.src = src;
       img.onload = () => {
-        loadingCountRef.current++;
+        if (cancelled) return;
         imagesRef.current[i] = img;
-        if (!cancelled && loadingCountRef.current === FRAMES.length) {
-          setLoaded(true);
-        }
+        if (i === 0) setLoaded(true);
       };
       img.onerror = () => {
-        loadingCountRef.current++;
-        if (!cancelled && loadingCountRef.current === FRAMES.length) {
-          setLoaded(true);
-        }
+        if (cancelled) return;
+        if (i === 0) setLoaded(true);
       };
     });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [frames]);
 
   // Scroll handler - map full page scroll to frame index
   useEffect(() => {
@@ -51,7 +52,7 @@ export default function PageBackgroundSequence() {
       const maxScroll = docHeight - viewportHeight;
       const progress = maxScroll > 0 ? Math.max(0, Math.min(1, scrollTop / maxScroll)) : 0;
 
-      const targetFrame = Math.floor(progress * (FRAMES.length - 1));
+      const targetFrame = Math.floor(progress * (frames.length - 1));
       if (targetFrame !== currentFrameRef.current) {
         currentFrameRef.current = targetFrame;
       }
@@ -60,7 +61,7 @@ export default function PageBackgroundSequence() {
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [frames]);
 
   // Draw loop with depth effects
   useEffect(() => {

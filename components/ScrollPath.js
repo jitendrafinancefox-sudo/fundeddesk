@@ -1,10 +1,26 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function ScrollPath() {
   const fillRef = useRef(null);
   const headRef = useRef(null);
+  // Starts false on both server and the client's first paint — reading
+  // window.innerWidth directly in the render body (as this used to) makes
+  // the client's very first render diverge from the server-rendered HTML,
+  // which forces React to discard and fully re-render the page tree on
+  // every load. Deciding visibility in an effect instead means the rail
+  // only ever appears after hydration has already reconciled cleanly.
+  const [visible, setVisible] = useState(false);
+
   useEffect(() => {
+    function checkWidth() { setVisible(window.innerWidth >= 760); }
+    checkWidth();
+    window.addEventListener('resize', checkWidth);
+    return () => window.removeEventListener('resize', checkWidth);
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
     let raf = 0;
     function update() {
       const doc = document.documentElement;
@@ -18,8 +34,9 @@ export default function ScrollPath() {
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll);
     return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); };
-  }, []);
-  if (typeof window !== 'undefined' && window.innerWidth < 760) return null;
+  }, [visible]);
+
+  if (!visible) return null;
   return (
     <div style={{ position: 'fixed', left: 22, top: 110, bottom: 40, width: 2, zIndex: 100, pointerEvents: 'none',
       background: 'rgba(124,242,156,.09)', borderRadius: 2 }}>

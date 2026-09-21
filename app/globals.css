@@ -566,6 +566,18 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
   background:rgba(34,197,139,0.03);
 }
 
+/* Comparison table (3 columns: feature / us / them) — desktop keeps the
+   rounded card clipped to its corners (matches the previous inline
+   overflow:hidden). Below 640px the feature-name column and two "Yes/No"
+   columns no longer fit without wrapping every label onto 3 lines and
+   squeezing the third column off the visible card edge, so the card
+   scrolls horizontally instead of silently clipping that column. */
+.cmp-table-card{overflow:hidden}
+@media(max-width:640px){
+  .cmp-table-card{overflow-x:auto; -webkit-overflow-scrolling:touch}
+  .cmp-table{min-width:560px}
+}
+
 /* === TAGS === */
 .tag{
   display:inline-flex;
